@@ -1,0 +1,2262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>DailyLife – Personal Life Manager</title>
+<meta name="theme-color" content="#0E7C66">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="DailyLife">
+<link id="manifest-link" rel="manifest" href="">
+<link rel="apple-touch-icon" id="apple-touch-icon" href="">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+:root{
+  --bg:#FAF8F4;
+  --surface:#FFFFFF;
+  --surface-2:#F3F0E9;
+  --ink:#232323;
+  --muted:#6B7280;
+  --border:#E7E3DA;
+  --primary:#0E7C66;
+  --primary-ink:#FFFFFF;
+  --primary-light:#E4F3EF;
+  --accent:#E8A33D;
+  --accent-light:#FBF0DD;
+  --danger:#D64545;
+  --danger-light:#FBE7E7;
+  --radius:16px;
+  --radius-sm:10px;
+  --shadow:0 1px 2px rgba(35,35,35,0.04), 0 8px 24px -12px rgba(35,35,35,0.10);
+  --font-display:'Manrope',sans-serif;
+  --font-body:'Inter',sans-serif;
+}
+[data-theme="dark"]{
+  --bg:#14171A;
+  --surface:#1C2024;
+  --surface-2:#22262B;
+  --ink:#EDEDEC;
+  --muted:#9AA1A9;
+  --border:#2B3036;
+  --primary:#22B8A0;
+  --primary-ink:#0C1210;
+  --primary-light:#1B3833;
+  --accent:#F0B95A;
+  --accent-light:#3A2E17;
+  --danger:#F17272;
+  --danger-light:#3A1F1F;
+  --shadow:0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  font-family:var(--font-body);
+  background:var(--bg);
+  color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+  transition:background .2s ease, color .2s ease;
+}
+h1,h2,h3,h4{font-family:var(--font-display); margin:0; letter-spacing:-0.01em;}
+p{margin:0;}
+button{font-family:inherit;}
+a{color:inherit;}
+::selection{background:var(--primary-light); color:var(--primary);}
+
+/* ===== Layout ===== */
+#app{display:flex; min-height:100vh;}
+.sidebar{
+  width:236px; flex-shrink:0; background:var(--surface); border-right:1px solid var(--border);
+  display:flex; flex-direction:column; padding:20px 14px; position:sticky; top:0; height:100vh;
+}
+.brand{display:flex; align-items:center; gap:10px; padding:6px 10px 22px 10px;}
+.brand-mark{
+  width:34px; height:34px; border-radius:10px; background:var(--primary); color:var(--primary-ink);
+  display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:800; font-size:16px;
+}
+.brand-name{font-family:var(--font-display); font-weight:800; font-size:16.5px;}
+.brand-sub{font-size:11px; color:var(--muted); margin-top:1px;}
+.nav-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:2px; flex:1;}
+.nav-item{
+  display:flex; align-items:center; gap:11px; padding:10px 12px; border-radius:var(--radius-sm);
+  color:var(--muted); cursor:pointer; font-size:14px; font-weight:600; transition:background .15s, color .15s;
+  user-select:none;
+}
+.nav-item .ic{font-size:16px; width:20px; text-align:center;}
+.nav-item:hover{background:var(--surface-2); color:var(--ink);}
+.nav-item.active{background:var(--primary-light); color:var(--primary);}
+.sidebar-footer{padding-top:10px; border-top:1px solid var(--border); margin-top:8px;}
+.theme-toggle{
+  display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-radius:var(--radius-sm);
+  font-size:13px; font-weight:600; color:var(--muted); cursor:pointer;
+}
+.switch{width:38px; height:22px; border-radius:20px; background:var(--surface-2); position:relative; border:1px solid var(--border); flex-shrink:0;}
+.switch::after{content:'';position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:var(--muted); transition:transform .18s ease, background .18s ease;}
+[data-theme="dark"] .switch::after{transform:translateX(16px); background:var(--primary);}
+
+.main{flex:1; min-width:0; display:flex; flex-direction:column;}
+.topbar{
+  display:none; align-items:center; justify-content:space-between; padding:14px 16px; background:var(--surface);
+  border-bottom:1px solid var(--border); position:sticky; top:0; z-index:20;
+}
+.hamburger{background:none; border:none; font-size:20px; color:var(--ink); cursor:pointer; padding:4px;}
+.page-content{padding:22px 26px 120px 26px; max-width:1180px; width:100%; margin:0 auto;}
+
+.profile-avatar-btn{
+  width:32px; height:32px; border-radius:50%; background:var(--primary); color:var(--primary-ink); border:none;
+  font-size:14px; font-weight:800; font-family:var(--font-display); display:flex; align-items:center; justify-content:center;
+  cursor:pointer; flex-shrink:0; transition:transform .12s ease;
+}
+.profile-avatar-btn:active{transform:scale(.92);}
+.profile-avatar-btn.active{box-shadow:0 0 0 2px var(--bg), 0 0 0 4px var(--primary);}
+.desktop-topbar{display:none;}
+@media (min-width:861px){
+  .desktop-topbar{
+    display:flex; justify-content:flex-end; align-items:center; padding:14px 26px 0 26px; max-width:1180px; width:100%; margin:0 auto;
+  }
+  .desktop-topbar .profile-avatar-btn{width:36px; height:36px; font-size:14px; box-shadow:var(--shadow);}
+}
+
+/* Bottom nav (mobile) */
+.bottom-nav{
+  display:none; position:fixed; bottom:0; left:0; right:0; background:var(--surface); border-top:1px solid var(--border);
+  z-index:30; padding:6px 2px calc(6px + env(safe-area-inset-bottom)) 2px;
+}
+.bottom-nav-scroll{display:flex; overflow-x:auto; gap:2px; scrollbar-width:none; -webkit-overflow-scrolling:touch;}
+.bottom-nav-scroll::-webkit-scrollbar{display:none;}
+.bn-item{
+  flex:0 0 auto; display:flex; flex-direction:column; align-items:center; gap:2px; padding:6px 12px;
+  color:var(--muted); font-size:10px; font-weight:700; cursor:pointer; min-width:54px; border-radius:10px;
+}
+.bn-item .ic{font-size:18px;}
+.bn-item.active{color:var(--primary); background:var(--primary-light);}
+.fab-btn{
+  position:fixed; left:50%; transform:translateX(-50%); bottom:calc(78px + env(safe-area-inset-bottom));
+  width:56px; height:56px; border-radius:50%; background:var(--primary); color:var(--primary-ink); border:4px solid var(--bg);
+  font-size:26px; font-weight:800; display:none; align-items:center; justify-content:center; cursor:pointer;
+  box-shadow:0 8px 20px -6px rgba(14,124,102,0.5); transition:transform .12s ease; z-index:40;
+}
+.fab-btn:active{transform:translateX(-50%) scale(.92);}
+.fab-btn.hidden{display:none !important;}
+.fab-desktop{
+  display:none; position:fixed; right:26px; bottom:26px; width:56px; height:56px; border-radius:50%;
+  background:var(--primary); color:var(--primary-ink); border:none; font-size:26px; font-weight:800; cursor:pointer;
+  box-shadow:0 8px 20px -6px rgba(14,124,102,0.5); z-index:40; align-items:center; justify-content:center;
+}
+@media (min-width:861px){ .fab-desktop{display:flex;} }
+.fab-desktop.hidden{display:none !important;}
+
+@media (max-width: 860px){
+  .sidebar{display:none;}
+  .sidebar.open{
+    display:flex; position:fixed; z-index:50; left:0; top:0; height:100vh; box-shadow:var(--shadow);
+    animation:slideIn .18s ease;
+  }
+  @keyframes slideIn{from{transform:translateX(-100%);} to{transform:translateX(0);}}
+  .scrim{display:none;}
+  .scrim.show{display:block; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:45;}
+  .topbar{display:flex;}
+  .bottom-nav{display:block;}
+  .fab-btn{display:flex;}
+  .page-content{padding:16px 14px 168px 14px;}
+}
+
+/* ===== Cards / grid ===== */
+.grid{display:grid; gap:14px;}
+.grid-2{grid-template-columns:1fr 1fr;}
+.grid-3{grid-template-columns:repeat(3,1fr);}
+.grid-4{grid-template-columns:repeat(4,1fr);}
+@media (max-width:900px){.grid-2,.grid-3,.grid-4{grid-template-columns:1fr 1fr;}}
+@media (max-width:600px){.grid-2,.grid-3,.grid-4{grid-template-columns:1fr;}}
+
+.card{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px;
+  box-shadow:var(--shadow);
+}
+.card-title{font-size:13px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.04em; margin-bottom:10px;}
+.stat-value{font-family:var(--font-display); font-size:28px; font-weight:800;}
+.stat-sub{font-size:12.5px; color:var(--muted); margin-top:2px;}
+
+.page-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; gap:10px; flex-wrap:wrap;}
+.page-header h2{font-size:22px; font-weight:800;}
+.page-header .sub{color:var(--muted); font-size:13px; margin-top:2px;}
+
+/* ===== Buttons ===== */
+.btn{
+  display:inline-flex; align-items:center; gap:6px; border:none; border-radius:999px; padding:9px 16px;
+  font-size:13.5px; font-weight:700; cursor:pointer; transition:transform .1s ease, opacity .15s ease;
+}
+.btn:active{transform:scale(.97);}
+.btn-primary{background:var(--primary); color:var(--primary-ink);}
+.btn-secondary{background:var(--surface-2); color:var(--ink); border:1px solid var(--border);}
+.btn-danger{background:var(--danger-light); color:var(--danger);}
+.btn-ghost{background:transparent; color:var(--muted);}
+.btn-icon{width:32px; height:32px; padding:0; justify-content:center; border-radius:9px; background:var(--surface-2); color:var(--muted); border:1px solid var(--border);}
+.btn-icon:hover{color:var(--ink);}
+.btn-sm{padding:6px 12px; font-size:12.5px;}
+
+/* ===== Forms ===== */
+.field{margin-bottom:13px;}
+.field label{display:block; font-size:12.5px; font-weight:700; color:var(--muted); margin-bottom:5px;}
+.field input, .field select, .field textarea{
+  width:100%; padding:10px 12px; border-radius:var(--radius-sm); border:1px solid var(--border);
+  background:var(--surface); color:var(--ink); font-size:14px; font-family:inherit;
+}
+.field input:focus, .field select:focus, .field textarea:focus{outline:2px solid var(--primary); outline-offset:-1px;}
+.field textarea{resize:vertical; min-height:70px;}
+.field-row{display:flex; gap:10px;}
+.field-row > .field{flex:1;}
+
+/* ===== List rows ===== */
+.list{display:flex; flex-direction:column; gap:8px;}
+.row{
+  display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius); padding:13px 14px;
+}
+.row-check{
+  width:21px; height:21px; border-radius:7px; border:2px solid var(--border); flex-shrink:0; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; color:#fff; font-size:12px; transition:.15s;
+}
+.row-check.checked{background:var(--primary); border-color:var(--primary);}
+.row-main{flex:1; min-width:0;}
+.row-title{font-weight:700; font-size:14.5px;}
+.row-title.done{text-decoration:line-through; color:var(--muted);}
+.row-meta{font-size:12px; color:var(--muted); margin-top:3px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+.row-actions{display:flex; gap:6px; flex-shrink:0;}
+
+.pill{display:inline-flex; align-items:center; padding:3px 9px; border-radius:999px; font-size:11px; font-weight:700;}
+.pill-low{background:var(--primary-light); color:var(--primary);}
+.pill-medium{background:var(--accent-light); color:var(--accent);}
+.pill-high{background:var(--danger-light); color:var(--danger);}
+
+.tabs{display:flex; gap:6px; margin-bottom:16px; flex-wrap:wrap;}
+.tab{padding:7px 14px; border-radius:999px; background:var(--surface-2); border:1px solid var(--border); font-size:12.5px; font-weight:700; color:var(--muted); cursor:pointer;}
+.tab.active{background:var(--primary); color:var(--primary-ink); border-color:var(--primary);}
+
+.searchbar{position:relative; margin-bottom:16px;}
+.searchbar input{width:100%; padding:10px 14px 10px 36px; border-radius:999px; border:1px solid var(--border); background:var(--surface); font-size:14px; color:var(--ink);}
+.searchbar .ic{position:absolute; left:13px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:14px;}
+
+.empty-state{text-align:center; padding:44px 18px; color:var(--muted);}
+.empty-state .ic{font-size:36px; margin-bottom:10px;}
+.empty-state .msg{font-weight:700; color:var(--ink); margin-bottom:4px;}
+.empty-state .hint{font-size:13px;}
+
+/* ===== Modal ===== */
+#modal-root{position:fixed; inset:0; z-index:100; display:none; align-items:center; justify-content:center; padding:16px;}
+#modal-root.show{display:flex;}
+.modal-backdrop{position:absolute; inset:0; background:rgba(20,18,14,.45); animation:fadeIn .15s ease;}
+@keyframes fadeIn{from{opacity:0;} to{opacity:1;}}
+.modal-sheet{
+  position:relative; background:var(--surface); width:100%; max-width:440px; border-radius:20px;
+  padding:20px 20px calc(20px + env(safe-area-inset-bottom)) 20px; max-height:88vh; overflow-y:auto;
+  animation:modalPop .16s ease;
+}
+@keyframes modalPop{from{transform:scale(.96); opacity:0;} to{transform:scale(1); opacity:1;}}
+.modal-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;}
+.modal-head h3{font-size:17px; font-weight:800;}
+.modal-actions{display:flex; gap:8px; margin-top:16px;}
+.modal-actions .btn{flex:1; justify-content:center;}
+
+/* ===== Toasts ===== */
+#toast-root{position:fixed; bottom:18px; left:50%; transform:translateX(-50%); z-index:200; display:flex; flex-direction:column; gap:8px; align-items:center; width:100%; pointer-events:none;}
+@media (max-width:860px){#toast-root{bottom:78px;}}
+.toast{
+  background:var(--ink); color:var(--bg); padding:10px 18px; border-radius:999px; font-size:13px; font-weight:600;
+  box-shadow:var(--shadow); animation:toastIn .18s ease; pointer-events:auto; display:flex; align-items:center; gap:8px;
+}
+[data-theme="dark"] .toast{background:var(--surface-2); color:var(--ink); border:1px solid var(--border);}
+.toast.error{background:var(--danger); color:#fff;}
+@keyframes toastIn{from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);}}
+
+/* misc */
+.chip-dot{width:8px; height:8px; border-radius:50%; display:inline-block; flex-shrink:0;}
+.section-title{font-size:15px; font-weight:800; margin:22px 0 10px 0;}
+.section-title:first-child{margin-top:0;}
+.progress-track{height:8px; border-radius:999px; background:var(--surface-2); overflow:hidden;}
+.progress-fill{height:100%; background:var(--primary); border-radius:999px; transition:width .3s ease;}
+.chart-wrap{position:relative; height:200px;}
+.note-card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px; display:flex; flex-direction:column; gap:8px; cursor:pointer; position:relative;}
+.note-card.pinned{border-color:var(--accent);}
+.pin-badge{position:absolute; top:10px; right:10px; color:var(--accent); font-size:14px;}
+.note-title{font-weight:800; font-size:14.5px;}
+.note-body{font-size:12.5px; color:var(--muted); overflow:hidden; display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical;}
+.note-date{font-size:11px; color:var(--muted);}
+.alert-banner{display:flex; gap:10px; align-items:flex-start; background:var(--danger-light); color:var(--danger); border-radius:var(--radius-sm); padding:11px 13px; font-size:12.5px; font-weight:600; margin-bottom:10px;}
+.alert-banner.warn{background:var(--accent-light); color:#8A5A0E;}
+[data-theme="dark"] .alert-banner.warn{color:var(--accent);}
+
+/* ===== Lock screen ===== */
+#lock-screen{
+  position:fixed; inset:0; z-index:500; background:var(--bg); display:none; flex-direction:column;
+  align-items:center; justify-content:center; padding:24px; text-align:center;
+}
+#lock-screen.show{display:flex;}
+.lock-mark{width:64px; height:64px; border-radius:18px; background:var(--primary); color:var(--primary-ink); display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:800; font-size:24px; margin-bottom:18px;}
+.lock-title{font-family:var(--font-display); font-weight:800; font-size:19px; margin-bottom:4px;}
+.lock-sub{color:var(--muted); font-size:13px; margin-bottom:22px;}
+.pin-dots{display:flex; gap:12px; margin-bottom:20px;}
+.pin-dot{width:14px; height:14px; border-radius:50%; border:2px solid var(--border); transition:background .1s, border-color .1s;}
+.pin-dot.filled{background:var(--primary); border-color:var(--primary);}
+.pin-dot.err{background:var(--danger); border-color:var(--danger);}
+.lock-pad{display:grid; grid-template-columns:repeat(3,64px); gap:12px; margin-bottom:14px;}
+.lock-key{
+  width:64px; height:64px; border-radius:50%; border:1px solid var(--border); background:var(--surface); color:var(--ink);
+  font-size:20px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center;
+}
+.lock-key:active{background:var(--surface-2);}
+.lock-key.wide{font-size:13px;}
+
+/* Transaction (income/expense) modal: type toggle + numeric amount pad */
+.tx-type-toggle{display:flex; gap:8px; margin-bottom:16px;}
+.tx-type-btn{
+  flex:1; padding:10px 8px; border-radius:var(--radius-sm); border:1.5px solid var(--border); background:var(--surface);
+  color:var(--muted); font-weight:700; font-size:13.5px; cursor:pointer; transition:.15s;
+}
+.tx-type-btn.expense.active{background:var(--danger-light); color:var(--danger); border-color:var(--danger);}
+.tx-type-btn.income.active{background:var(--primary-light); color:var(--primary); border-color:var(--primary);}
+.amount-display{
+  text-align:center; font-family:var(--font-display); font-size:34px; font-weight:800; padding:14px 0 6px 0;
+  color:var(--ink); letter-spacing:-0.01em; flex:1;
+}
+.amount-display-row{display:flex; align-items:center; justify-content:center; position:relative;}
+.amount-clear-btn{
+  position:absolute; right:0; top:50%; transform:translateY(-50%); background:none; border:none;
+  color:var(--muted); font-size:12px; font-weight:700; cursor:pointer; padding:6px 8px;
+}
+.amount-clear-btn:active{color:var(--danger);}
+.amount-pad{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:0 auto 18px auto; max-width:280px;}
+.amount-key{
+  padding:14px 0; border-radius:12px; border:none; background:var(--surface-2); color:var(--ink);
+  font-size:19px; font-weight:700; cursor:pointer; transition:.1s;
+}
+.amount-key:active{background:var(--border);}
+.amount-key.wide{font-size:15px; color:var(--muted);}
+
+/* Profile avatar (large, used on Profile page + edit modal) and emoji picker */
+.avatar-lg{
+  width:64px; height:64px; border-radius:50%; background:var(--primary); color:var(--primary-ink);
+  display:flex; align-items:center; justify-content:center; font-weight:800; font-size:24px;
+  font-family:var(--font-display); flex-shrink:0;
+}
+.emoji-grid{display:grid; grid-template-columns:repeat(6,1fr); gap:8px;}
+.emoji-opt{
+  font-size:22px; padding:10px 0; border-radius:12px; border:2px solid transparent; background:var(--surface-2);
+  cursor:pointer; transition:.12s;
+}
+.emoji-opt:active{transform:scale(.9);}
+.emoji-opt.selected{border-color:var(--primary); background:var(--primary-light);}
+.profile-avatar-btn.emoji-mode{background:var(--surface-2);}
+.avatar-lg.emoji-mode{background:var(--surface-2);}
+.lock-error{color:var(--danger); font-size:12.5px; font-weight:600; height:16px; margin-bottom:6px;}
+.lock-bio{margin-top:6px;}
+</style>
+</head>
+<body>
+<div id="lock-screen">
+  <div class="lock-mark">DL</div>
+  <div class="lock-title">DailyLife is locked</div>
+  <div class="lock-sub" id="lock-sub">Enter your PIN to continue</div>
+  <div class="pin-dots" id="pin-dots"></div>
+  <div class="lock-error" id="lock-error"></div>
+  <div class="lock-pad" id="lock-pad"></div>
+</div>
+<div id="app">
+  <div class="scrim" id="scrim"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">DL</div>
+      <div>
+        <div class="brand-name">DailyLife</div>
+        <div class="brand-sub">Personal manager</div>
+      </div>
+    </div>
+    <ul class="nav-list" id="nav-list"></ul>
+    <div class="sidebar-footer">
+      <div class="theme-toggle" id="theme-toggle">
+        <span id="theme-label">Light mode</span>
+        <span class="switch"></span>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <button class="hamburger" id="hamburger-btn">☰</button>
+      <div class="brand" style="padding:0;">
+        <div class="brand-mark" style="width:28px;height:28px;font-size:13px;">DL</div>
+        <div class="brand-name" style="font-size:15px;">DailyLife</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button class="btn-icon" id="theme-toggle-mobile">🌙</button>
+        <button class="profile-avatar-btn" id="profile-btn-mobile">👤</button>
+      </div>
+    </div>
+    <div class="desktop-topbar">
+      <button class="profile-avatar-btn" id="profile-btn-desktop">👤</button>
+    </div>
+    <main class="page-content" id="page-content"></main>
+  </div>
+
+  <nav class="bottom-nav">
+    <div class="bottom-nav-scroll" id="bottom-nav-list"></div>
+  </nav>
+  <button class="fab-btn" id="fab-btn">+</button>
+  <button class="fab-desktop" id="fab-btn-desktop">+</button>
+</div>
+
+<div id="modal-root"><div class="modal-backdrop" id="modal-backdrop"></div><div class="modal-sheet" id="modal-sheet"></div></div>
+<div id="toast-root"></div>
+
+<script>
+/* ===================== DailyLife – Personal Life Manager =====================
+   Pure vanilla JS + localStorage. No backend, no build step.
+   All persistence goes through saveToStorage / loadFromStorage / updateStorage / deleteFromStorage.
+================================================================================ */
+
+/* ---------- Storage keys ---------- */
+const STORAGE_KEYS = {
+  tasks: 'dailylife_tasks',
+  planner: 'dailylife_planner',
+  expenses: 'dailylife_expenses',
+  income: 'dailylife_income',
+  shopping: 'dailylife_shopping',
+  reminders: 'dailylife_reminders',
+  notes: 'dailylife_notes',
+  bills: 'dailylife_bills',
+  documents: 'dailylife_documents',
+  settings: 'dailylife_settings',
+};
+
+/* ---------- Generic storage helpers ---------- */
+function loadFromStorage(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch (e) {
+    console.error('loadFromStorage failed for', key, e);
+    return fallback;
+  }
+}
+function saveToStorage(key, data) {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+    return true;
+  } catch (e) {
+    console.error('saveToStorage failed for', key, e);
+    showToast('Could not save data locally', 'error');
+    return false;
+  }
+}
+function updateStorage(key, data) { return saveToStorage(key, data); }
+function deleteFromStorage(key) {
+  try { localStorage.removeItem(key); return true; }
+  catch (e) { console.error('deleteFromStorage failed for', key, e); return false; }
+}
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+/* Local-calendar-date formatter. NEVER use toISOString() for calendar dates — it converts to UTC
+   and silently shifts the date by a day in timezones ahead of/behind UTC (this caused the
+   Planner "forward" button bug for users in UTC+ zones). Always derive Y-M-D from local getters. */
+function toLocalDateStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function todayISO() { return toLocalDateStr(new Date()); }
+
+/* ---------- Default settings (merged with anything already saved) ---------- */
+const DEFAULT_SETTINGS = {
+  theme: 'light',
+  profile: { name: '', avatar: '🙂', avatarType: 'initials', email: '' },
+  security: { enabled: false, passwordHash: null, salt: null, biometricEnabled: false, credentialId: null },
+  notifications: { enabled: false, notifiedIds: [] },
+};
+function mergeDefaults(saved, defaults) {
+  const out = { ...defaults, ...saved };
+  Object.keys(defaults).forEach(k => {
+    if (defaults[k] && typeof defaults[k] === 'object' && !Array.isArray(defaults[k])) {
+      out[k] = { ...defaults[k], ...(saved && saved[k] ? saved[k] : {}) };
+    }
+  });
+  return out;
+}
+
+/* ---------- App state (in-memory mirror of localStorage) ---------- */
+const state = {
+  tasks: loadFromStorage(STORAGE_KEYS.tasks, []),
+  planner: loadFromStorage(STORAGE_KEYS.planner, []),
+  expenses: loadFromStorage(STORAGE_KEYS.expenses, []),
+  income: loadFromStorage(STORAGE_KEYS.income, []),
+  shopping: loadFromStorage(STORAGE_KEYS.shopping, []),
+  reminders: loadFromStorage(STORAGE_KEYS.reminders, []),
+  notes: loadFromStorage(STORAGE_KEYS.notes, []),
+  bills: loadFromStorage(STORAGE_KEYS.bills, []),
+  documents: loadFromStorage(STORAGE_KEYS.documents, []),
+  settings: mergeDefaults(loadFromStorage(STORAGE_KEYS.settings, {}), DEFAULT_SETTINGS),
+};
+// Migrate planner items that predate the "continuous dates" feature
+state.planner.forEach(p => { if (!p.date) p.date = todayISO(); });
+
+function persist(entity) {
+  saveToStorage(STORAGE_KEYS[entity], state[entity]);
+}
+
+/* ---------- Category / priority config (shared colors) ---------- */
+const EXPENSE_CATEGORIES = [
+  { name: 'Food', color: '#E8A33D' },
+  { name: 'Transport', color: '#4C8CD9' },
+  { name: 'Shopping', color: '#B267D6' },
+  { name: 'Education', color: '#0E7C66' },
+  { name: 'Bills', color: '#D64545' },
+  { name: 'Entertainment', color: '#D9668C' },
+  { name: 'Health', color: '#2BB0A6' },
+  { name: 'Other', color: '#8A8578' },
+];
+const INCOME_CATEGORIES = [
+  { name: 'Salary', color: '#0E7C66' },
+  { name: 'Business', color: '#4C8CD9' },
+  { name: 'Freelance', color: '#B267D6' },
+  { name: 'Investment', color: '#E8A33D' },
+  { name: 'Gift', color: '#D9668C' },
+  { name: 'Other', color: '#8A8578' },
+];
+const SHOPPING_CATEGORIES = [
+  { name: 'Grocery', color: '#E8A33D' },
+  { name: 'Household', color: '#4C8CD9' },
+  { name: 'Personal', color: '#B267D6' },
+  { name: 'Electronics', color: '#0E7C66' },
+  { name: 'Other', color: '#8A8578' },
+];
+const REPEAT_OPTIONS = ['None', 'Daily', 'Weekly', 'Monthly', 'Yearly'];
+const BILL_STATUS = ['Upcoming', 'Paid', 'Overdue'];
+const DOC_TYPES = ['Warranty', 'Insurance', 'ID / Legal', 'Subscription', 'Other'];
+
+function catColor(list, name) {
+  const f = list.find(c => c.name === name);
+  return f ? f.color : '#8A8578';
+}
+
+/* ---------- Navigation config ---------- */
+const ROUTES = [
+  { id: 'dashboard', label: 'Dashboard', icon: '🏠' },
+  { id: 'tasks', label: 'Tasks', icon: '✅' },
+  { id: 'planner', label: 'Planner', icon: '📅' },
+  { id: 'expenses', label: 'Finance', icon: '💰' },
+  { id: 'shopping', label: 'Shopping', icon: '🛒' },
+  { id: 'reminders', label: 'Reminders', icon: '🔔' },
+  { id: 'notes', label: 'Notes', icon: '📝' },
+  { id: 'bills', label: 'Bills', icon: '💳' },
+  { id: 'documents', label: 'Documents', icon: '📄' },
+  { id: 'profile', label: 'Profile', icon: '👤' },
+];
+// Routes that have a natural "add new item" action for the center FAB
+const FAB_ROUTES = { tasks: 1, planner: 1, expenses: 1, shopping: 1, reminders: 1, notes: 1, bills: 1, documents: 1 };
+
+let currentRoute = (location.hash || '#/dashboard').replace('#/', '');
+if (!ROUTES.some(r => r.id === currentRoute)) currentRoute = 'dashboard';
+
+/* ---------- Page-local UI state ---------- */
+let taskFilter = 'all';
+let taskSearch = '';
+let plannerDate = todayISO();
+let financeTab = 'expense'; // 'expense' | 'income'
+let notesSearch = '';
+
+/* ---------- Theme ---------- */
+function applyTheme() {
+  document.documentElement.setAttribute('data-theme', state.settings.theme);
+  const mobileBtn = document.getElementById('theme-toggle-mobile');
+  if (mobileBtn) mobileBtn.textContent = state.settings.theme === 'dark' ? '☀️' : '🌙';
+  const label = document.getElementById('theme-label');
+  if (label) label.textContent = state.settings.theme === 'dark' ? 'Dark mode' : 'Light mode';
+}
+function toggleTheme() {
+  state.settings.theme = state.settings.theme === 'dark' ? 'light' : 'dark';
+  persist('settings');
+  applyTheme();
+}
+
+/* ---------- Navigation rendering ---------- */
+function renderNav() {
+  const navList = document.getElementById('nav-list');
+  navList.innerHTML = ROUTES.map(r => `
+    <li class="nav-item ${r.id === currentRoute ? 'active' : ''}" data-route="${r.id}">
+      <span class="ic">${r.icon}</span><span>${r.label}</span>
+    </li>`).join('');
+  navList.querySelectorAll('.nav-item').forEach(el => {
+    el.addEventListener('click', () => { location.hash = '#/' + el.dataset.route; closeSidebar(); });
+  });
+
+  const bnItem = r => `<div class="bn-item ${r.id === currentRoute ? 'active' : ''}" data-route="${r.id}"><span class="ic">${r.icon}</span><span>${r.label}</span></div>`;
+  const bottomList = document.getElementById('bottom-nav-list');
+  bottomList.innerHTML = ROUTES.map(bnItem).join('');
+  bottomList.querySelectorAll('.bn-item').forEach(el => {
+    el.addEventListener('click', () => { location.hash = '#/' + el.dataset.route; });
+  });
+  const activeBn = bottomList.querySelector('.bn-item.active');
+  if (activeBn && typeof activeBn.scrollIntoView === 'function') {
+    try { activeBn.scrollIntoView({ block: 'nearest', inline: 'center' }); } catch (e) { /* no-op */ }
+  }
+
+  const fabDisabled = !FAB_ROUTES[currentRoute];
+  document.getElementById('fab-btn').classList.toggle('hidden', fabDisabled);
+  document.getElementById('fab-btn-desktop').classList.toggle('hidden', fabDisabled);
+
+  updateProfileAvatar();
+}
+function avatarDisplay() {
+  const p = state.settings.profile;
+  if (p.avatarType === 'emoji') return p.avatar || '🙂';
+  const name = (p.name || '').trim();
+  return name ? name.split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase() : '👤';
+}
+function updateProfileAvatar() {
+  const display = avatarDisplay();
+  const isEmoji = state.settings.profile.avatarType === 'emoji';
+  document.querySelectorAll('.profile-avatar-btn').forEach(btn => {
+    btn.textContent = display;
+    btn.classList.toggle('active', currentRoute === 'profile');
+    btn.classList.toggle('emoji-mode', isEmoji);
+  });
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('scrim').classList.remove('show');
+}
+document.getElementById('hamburger-btn').addEventListener('click', () => {
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('scrim').classList.add('show');
+});
+document.getElementById('scrim').addEventListener('click', closeSidebar);
+document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+document.getElementById('theme-toggle-mobile').addEventListener('click', toggleTheme);
+document.getElementById('profile-btn-mobile').addEventListener('click', () => { location.hash = '#/profile'; closeSidebar(); });
+document.getElementById('profile-btn-desktop').addEventListener('click', () => { location.hash = '#/profile'; });
+
+/* ---------- Center "Add" button: routes to the right modal for the current page ---------- */
+function centralAddHandler() {
+  if (!FAB_ROUTES[currentRoute]) return;
+  switch (currentRoute) {
+    case 'tasks': openTaskModal(); break;
+    case 'planner': openPlannerModal(); break;
+    case 'expenses': openTransactionModal(financeTab === 'income' ? 'income' : 'expense'); break;
+    case 'shopping': openShopModal(); break;
+    case 'reminders': openReminderModal(); break;
+    case 'notes': openNoteModal(); break;
+    case 'bills': openBillModal(); break;
+    case 'documents': openDocModal(); break;
+  }
+}
+document.getElementById('fab-btn').addEventListener('click', centralAddHandler);
+document.getElementById('fab-btn-desktop').addEventListener('click', centralAddHandler);
+
+/* ---------- Toasts ---------- */
+function showToast(message, type = 'success') {
+  const root = document.getElementById('toast-root');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type === 'error' ? ' error' : '');
+  el.innerHTML = `<span>${type === 'error' ? '⚠️' : '✓'}</span><span>${message}</span>`;
+  root.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .2s'; setTimeout(() => el.remove(), 200); }, 2200);
+}
+
+/* ---------- Modal helpers ---------- */
+function openModal(html) {
+  document.getElementById('modal-sheet').innerHTML = html;
+  document.getElementById('modal-root').classList.add('show');
+}
+function closeModal() {
+  document.getElementById('modal-root').classList.remove('show');
+  document.getElementById('modal-sheet').innerHTML = '';
+}
+document.getElementById('modal-backdrop').addEventListener('click', closeModal);
+
+function confirmDialog(title, message, onConfirm, confirmLabel) {
+  openModal(`
+    <div class="modal-head"><h3>${title}</h3></div>
+    <p style="color:var(--muted); font-size:14px; line-height:1.5;">${message}</p>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="confirm-cancel">Cancel</button>
+      <button class="btn btn-danger" id="confirm-ok">${confirmLabel || 'Delete'}</button>
+    </div>
+  `);
+  document.getElementById('confirm-cancel').addEventListener('click', closeModal);
+  document.getElementById('confirm-ok').addEventListener('click', () => { onConfirm(); closeModal(); });
+}
+
+/* ---------- Small render utils ---------- */
+function esc(str) {
+  if (str === undefined || str === null) return '';
+  return String(str).replace(/[&<>"']/g, s => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[s]));
+}
+function fmtDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  if (isNaN(d)) return iso;
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+function fmtMoney(n) { return '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+/* jsPDF's built-in fonts don't reliably render the ₹ glyph (it can show as a blank box),
+   so PDF reports use "Rs" instead of the symbol. */
+function fmtMoneyPDF(n) { return 'Rs ' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function daysBetween(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  const t = new Date(todayISO() + 'T00:00:00');
+  return Math.round((d - t) / 86400000);
+}
+function sum(arr) { return arr.reduce((s, e) => s + Number(e.amount || 0), 0); }
+function emptyState(icon, msg, hint) {
+  return `<div class="empty-state"><div class="ic">${icon}</div><div class="msg">${msg}</div><div class="hint">${hint || ''}</div></div>`;
+}
+function downloadBlob(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function toCSV(rows) {
+  return rows.map(r => r.map(v => {
+    const s = String(v ?? '');
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(',')).join('\n');
+}
+function downloadPDFReport(title, headers, rows, filename, summaryLines) {
+  try {
+    const jsPDFCtor = window.jspdf && window.jspdf.jsPDF;
+    if (!jsPDFCtor) { showToast('PDF library did not load — check your connection', 'error'); return; }
+    const doc = new jsPDFCtor();
+    doc.setFontSize(16);
+    doc.setTextColor(20);
+    doc.text(title, 14, 18);
+    doc.setFontSize(9.5);
+    doc.setTextColor(120);
+    doc.text('Generated ' + new Date().toLocaleString(), 14, 24);
+    let startY = 30;
+    if (summaryLines && summaryLines.length) {
+      doc.setFontSize(11);
+      doc.setTextColor(30);
+      summaryLines.forEach((line, i) => doc.text(line, 14, startY + i * 6));
+      startY += summaryLines.length * 6 + 6;
+    }
+    doc.autoTable({
+      head: [headers], body: rows, startY,
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [14, 124, 102], textColor: 255 },
+      alternateRowStyles: { fillColor: [246, 244, 239] },
+    });
+    doc.save(filename);
+    showToast('PDF downloaded');
+  } catch (e) {
+    console.error('PDF generation failed', e);
+    showToast('PDF generation failed', 'error');
+  }
+}
+
+/* ===================== Security: PIN lock + optional biometric ===================== */
+async function sha256Hex(text) {
+  const enc = new TextEncoder().encode(text);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function hashPin(pin, salt) { return sha256Hex(salt + ':' + pin); }
+
+let appUnlocked = !state.settings.security.enabled;
+let pinBuffer = '';
+
+function buildLockPad() {
+  const pad = document.getElementById('lock-pad');
+  const keys = ['1','2','3','4','5','6','7','8','9','bio','0','del'];
+  pad.innerHTML = keys.map(k => {
+    if (k === 'bio') return `<button class="lock-key wide" id="lock-key-bio">🔐</button>`;
+    if (k === 'del') return `<button class="lock-key wide" id="lock-key-del">⌫</button>`;
+    return `<button class="lock-key" data-digit="${k}">${k}</button>`;
+  }).join('');
+  pad.querySelectorAll('[data-digit]').forEach(btn => btn.addEventListener('click', () => onPinDigit(btn.dataset.digit)));
+  document.getElementById('lock-key-del').addEventListener('click', () => { pinBuffer = pinBuffer.slice(0, -1); renderPinDots(); });
+  const bioBtn = document.getElementById('lock-key-bio');
+  if (state.settings.security.biometricEnabled && state.settings.security.credentialId) {
+    bioBtn.style.visibility = 'visible';
+    bioBtn.addEventListener('click', attemptBiometricUnlock);
+  } else {
+    bioBtn.style.visibility = 'hidden';
+  }
+}
+function renderPinDots(err) {
+  const dots = document.getElementById('pin-dots');
+  dots.innerHTML = [0,1,2,3].map(i => `<div class="pin-dot ${i < pinBuffer.length ? 'filled' : ''} ${err ? 'err' : ''}"></div>`).join('');
+}
+async function onPinDigit(d) {
+  if (pinBuffer.length >= 4) return;
+  pinBuffer += d;
+  renderPinDots();
+  if (pinBuffer.length === 4) {
+    const hash = await hashPin(pinBuffer, state.settings.security.salt);
+    if (hash === state.settings.security.passwordHash) {
+      unlockApp();
+    } else {
+      renderPinDots(true);
+      document.getElementById('lock-error').textContent = 'Incorrect PIN, try again';
+      setTimeout(() => { pinBuffer = ''; renderPinDots(); document.getElementById('lock-error').textContent = ''; }, 500);
+    }
+  }
+}
+function unlockApp() {
+  appUnlocked = true;
+  pinBuffer = '';
+  document.getElementById('lock-screen').classList.remove('show');
+  render();
+  checkDueNotifications();
+}
+function showLockScreen() {
+  pinBuffer = '';
+  renderPinDots();
+  document.getElementById('lock-error').textContent = '';
+  buildLockPad();
+  document.getElementById('lock-screen').classList.add('show');
+}
+async function attemptBiometricUnlock() {
+  try {
+    if (!window.PublicKeyCredential) throw new Error('unsupported');
+    const credId = base64ToBuf(state.settings.security.credentialId);
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    await navigator.credentials.get({
+      publicKey: { challenge, allowCredentials: [{ id: credId, type: 'public-key' }], userVerification: 'required', timeout: 30000 }
+    });
+    unlockApp();
+  } catch (e) {
+    document.getElementById('lock-error').textContent = 'Biometric unlock failed — use your PIN';
+  }
+}
+function bufToBase64(buf) { return btoa(String.fromCharCode(...new Uint8Array(buf))); }
+function utf8ToBase64(str) { return btoa(unescape(encodeURIComponent(str))); }
+function base64ToBuf(b64) { return Uint8Array.from(atob(b64), c => c.charCodeAt(0)).buffer; }
+async function registerBiometric() {
+  if (!window.PublicKeyCredential) { showToast('Biometric unlock is not supported on this device', 'error'); return false; }
+  try {
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    const userId = crypto.getRandomValues(new Uint8Array(16));
+    const cred = await navigator.credentials.create({
+      publicKey: {
+        challenge,
+        rp: { name: 'DailyLife' },
+        user: { id: userId, name: state.settings.profile.name || 'DailyLife user', displayName: state.settings.profile.name || 'DailyLife user' },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+        authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' },
+        timeout: 30000,
+      }
+    });
+    state.settings.security.credentialId = bufToBase64(cred.rawId);
+    state.settings.security.biometricEnabled = true;
+    persist('settings');
+    return true;
+  } catch (e) {
+    showToast('Could not set up fingerprint / Face ID unlock', 'error');
+    return false;
+  }
+}
+
+/* ===================== Service worker (needed for mobile notifications + installability) ===================== */
+let swRegistration = null;
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return Promise.resolve(null);
+  return navigator.serviceWorker.register('./sw.js', { scope: './' })
+    .then(reg => { swRegistration = reg; return reg; })
+    .catch(() => { swRegistration = null; return null; }); // e.g. opened via file:// — silently degrade to desktop-only notifications
+}
+registerServiceWorker();
+
+/* ===================== Notifications for due bills & reminders ===================== */
+function notificationsSupported() {
+  return typeof Notification !== 'undefined';
+}
+async function showAppNotification(title, options) {
+  // Android/Chrome mobile requires notifications to go through a service worker registration;
+  // the plain `new Notification()` constructor throws there. Desktop browsers support both,
+  // so we prefer the service worker path whenever one is registered and fall back otherwise.
+  try {
+    const reg = swRegistration || (navigator.serviceWorker && await navigator.serviceWorker.getRegistration());
+    if (reg && reg.showNotification) {
+      await reg.showNotification(title, { icon: 'data:,', badge: 'data:,', ...options });
+      return true;
+    }
+  } catch (e) { /* fall through to direct Notification */ }
+  try {
+    new Notification(title, options);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+function checkDueNotifications() {
+  if (!state.settings.notifications.enabled || !notificationsSupported() || Notification.permission !== 'granted') return;
+  const notified = new Set(state.settings.notifications.notifiedIds);
+  let changed = false;
+  state.reminders.forEach(r => {
+    const key = 'rem_' + r.id + '_' + r.date;
+    if (!notified.has(key) && daysBetween(r.date) === 0) {
+      showAppNotification('Reminder: ' + r.title, { body: r.description || ('Due today' + (r.time ? ' at ' + r.time : '')) });
+      notified.add(key); changed = true;
+    }
+  });
+  state.bills.forEach(b => {
+    const key = 'bill_' + b.id + '_' + b.dueDate;
+    if (b.status !== 'Paid' && !notified.has(key) && daysBetween(b.dueDate) >= 0 && daysBetween(b.dueDate) <= 1) {
+      showAppNotification('Bill due: ' + b.name, { body: fmtMoney(b.amount) + ' due ' + fmtDate(b.dueDate) });
+      notified.add(key); changed = true;
+    }
+  });
+  if (changed) { state.settings.notifications.notifiedIds = Array.from(notified).slice(-200); persist('settings'); }
+}
+function enableNotifications() {
+  if (!notificationsSupported()) { showToast('Notifications are not supported on this device', 'error'); return; }
+  registerServiceWorker().finally(() => {
+    Notification.requestPermission().then(perm => {
+      state.settings.notifications.enabled = perm === 'granted';
+      persist('settings');
+      if (perm === 'granted') { showToast('Notifications enabled'); checkDueNotifications(); }
+      else showToast('Notification permission was not granted', 'error');
+      render();
+    });
+  });
+}
+function disableNotifications() { state.settings.notifications.enabled = false; persist('settings'); render(); }
+async function sendTestNotification() {
+  if (!notificationsSupported()) { showToast('Notifications are not supported on this device', 'error'); return; }
+  if (Notification.permission !== 'granted') { showToast('Enable notifications first', 'error'); return; }
+  const ok = await showAppNotification('DailyLife', { body: 'Notifications are working on this device 🎉' });
+  showToast(ok ? 'Test notification sent' : 'Could not send a notification on this device', ok ? 'success' : 'error');
+}
+setInterval(checkDueNotifications, 5 * 60 * 1000);
+
+/* ===================== Export / Import ===================== */
+function exportData() {
+  const payload = {};
+  Object.keys(STORAGE_KEYS).forEach(k => payload[k] = state[k]);
+  payload._exportedAt = new Date().toISOString();
+  payload._app = 'DailyLife';
+  downloadBlob(`dailylife-backup-${todayISO()}.json`, JSON.stringify(payload, null, 2), 'application/json');
+  showToast('Backup file downloaded');
+}
+function importData(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      Object.keys(STORAGE_KEYS).forEach(k => {
+        if (k === 'settings') {
+          state.settings = mergeDefaults(data.settings || {}, DEFAULT_SETTINGS);
+        } else if (Array.isArray(data[k])) {
+          state[k] = data[k];
+        }
+        persist(k);
+      });
+      state.planner.forEach(p => { if (!p.date) p.date = todayISO(); });
+      showToast('Data imported successfully');
+      closeModal();
+      render();
+    } catch (e) {
+      showToast('That file could not be read as a DailyLife backup', 'error');
+    }
+  };
+  reader.readAsText(file);
+}
+
+/* ---------- Router ---------- */
+window.addEventListener('hashchange', () => {
+  const r = (location.hash || '#/dashboard').replace('#/', '');
+  currentRoute = ROUTES.some(x => x.id === r) ? r : 'dashboard';
+  render();
+});
+
+let chartRefs = {}; // track Chart.js instances so we can destroy before re-render
+function destroyCharts() {
+  Object.values(chartRefs).forEach(c => c && c.destroy());
+  chartRefs = {};
+}
+
+function render() {
+  if (state.settings.security.enabled && !appUnlocked) { showLockScreen(); return; }
+  applyTheme();
+  renderNav();
+  destroyCharts();
+  const el = document.getElementById('page-content');
+  switch (currentRoute) {
+    case 'dashboard': el.innerHTML = renderDashboard(); afterRenderDashboard(); break;
+    case 'tasks': el.innerHTML = renderTasksPage(); afterRenderTasks(); break;
+    case 'planner': el.innerHTML = renderPlannerPage(); afterRenderPlanner(); break;
+    case 'expenses': el.innerHTML = renderFinancePage(); afterRenderFinance(); break;
+    case 'shopping': el.innerHTML = renderShoppingPage(); afterRenderShopping(); break;
+    case 'reminders': el.innerHTML = renderRemindersPage(); afterRenderReminders(); break;
+    case 'notes': el.innerHTML = renderNotesPage(); afterRenderNotes(); break;
+    case 'bills': el.innerHTML = renderBillsPage(); afterRenderBills(); break;
+    case 'documents': el.innerHTML = renderDocumentsPage(); afterRenderDocuments(); break;
+    case 'profile': el.innerHTML = renderProfilePage(); afterRenderProfile(); break;
+    default: el.innerHTML = '';
+  }
+  window.scrollTo(0, 0);
+}
+
+/* ---------- PWA manifest ---------- */
+document.getElementById('manifest-link').setAttribute('href', './manifest.json');
+document.getElementById('apple-touch-icon').setAttribute('href', './icons/icon-192.png');
+
+/* ============================== TASKS ============================== */
+function renderTasksPage() {
+  const filtered = state.tasks.filter(t => {
+    if (taskFilter === 'pending' && t.completed) return false;
+    if (taskFilter === 'completed' && !t.completed) return false;
+    if (taskSearch && !t.title.toLowerCase().includes(taskSearch.toLowerCase())) return false;
+    return true;
+  }).sort((a, b) => (a.completed - b.completed) || (a.dueDate || '9999').localeCompare(b.dueDate || '9999'));
+  const completedCount = state.tasks.filter(t => t.completed).length;
+
+  return `
+    <div class="page-header">
+      <div><h2>Tasks</h2><div class="sub">${state.tasks.filter(t=>!t.completed).length} pending · ${completedCount} completed</div></div>
+    </div>
+    ${state.tasks.length ? `<div class="grid grid-2" style="margin-bottom:18px;">
+      <div class="card"><div class="card-title">Completion</div><div class="chart-wrap" style="height:150px;"><canvas id="task-doughnut"></canvas></div></div>
+      <div class="card"><div class="card-title">By priority</div><div class="chart-wrap" style="height:150px;"><canvas id="task-bar"></canvas></div></div>
+    </div>` : ''}
+    <div class="searchbar"><span class="ic">🔍</span><input id="task-search" placeholder="Search tasks..." value="${esc(taskSearch)}"></div>
+    <div class="tabs">
+      ${['all','pending','completed'].map(f => `<div class="tab ${taskFilter===f?'active':''}" data-filter="${f}">${f[0].toUpperCase()+f.slice(1)}</div>`).join('')}
+    </div>
+    <div class="list" id="task-list">
+      ${filtered.length ? filtered.map(taskRow).join('') : emptyState('✅','No tasks here','Add a task to get started')}
+    </div>
+  `;
+}
+function taskRow(t) {
+  const overdue = !t.completed && t.dueDate && daysBetween(t.dueDate) < 0;
+  return `
+    <div class="row" data-id="${t.id}">
+      <div class="row-check ${t.completed?'checked':''}" data-action="toggle">${t.completed?'✓':''}</div>
+      <div class="row-main">
+        <div class="row-title ${t.completed?'done':''}">${esc(t.title)}</div>
+        <div class="row-meta">
+          <span class="pill pill-${t.priority.toLowerCase()}">${t.priority}</span>
+          ${t.dueDate ? `<span style="color:${overdue?'var(--danger)':'var(--muted)'}">${overdue?'Overdue · ':''}${fmtDate(t.dueDate)}</span>` : ''}
+        </div>
+      </div>
+      <div class="row-actions">
+        <button class="btn-icon" data-action="edit">✎</button>
+        <button class="btn-icon" data-action="delete">🗑</button>
+      </div>
+    </div>`;
+}
+function afterRenderTasks() {
+  document.getElementById('task-search').addEventListener('input', e => {
+    taskSearch = e.target.value;
+    const list = document.getElementById('task-list');
+    list.outerHTML = renderTaskListOnly();
+    bindTaskRowActions();
+    document.getElementById('task-search').focus();
+    document.getElementById('task-search').setSelectionRange(taskSearch.length, taskSearch.length);
+  });
+  document.querySelectorAll('[data-filter]').forEach(el => el.addEventListener('click', () => { taskFilter = el.dataset.filter; render(); }));
+  bindTaskRowActions();
+
+  if (state.tasks.length) {
+    const done = state.tasks.filter(t => t.completed).length, pending = state.tasks.length - done;
+    chartRefs.taskDoughnut = new Chart(document.getElementById('task-doughnut'), {
+      type: 'doughnut',
+      data: { labels: ['Completed','Pending'], datasets: [{ data: [done, pending], backgroundColor: ['#0E7C66','#E7E3DA'], borderWidth: 0 }] },
+      options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, font: { size: 10 } } } }, maintainAspectRatio: false }
+    });
+    const byP = { Low: 0, Medium: 0, High: 0 };
+    state.tasks.forEach(t => byP[t.priority] = (byP[t.priority] || 0) + 1);
+    chartRefs.taskBar = new Chart(document.getElementById('task-bar'), {
+      type: 'bar',
+      data: { labels: Object.keys(byP), datasets: [{ data: Object.values(byP), backgroundColor: ['#0E7C66','#E8A33D','#D64545'], borderRadius: 6 }] },
+      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { font: { size: 9 } } }, x: { ticks: { font: { size: 9 } } } }, maintainAspectRatio: false }
+    });
+  }
+}
+function renderTaskListOnly() {
+  const filtered = state.tasks.filter(t => {
+    if (taskFilter === 'pending' && t.completed) return false;
+    if (taskFilter === 'completed' && !t.completed) return false;
+    if (taskSearch && !t.title.toLowerCase().includes(taskSearch.toLowerCase())) return false;
+    return true;
+  }).sort((a, b) => (a.completed - b.completed) || (a.dueDate || '9999').localeCompare(b.dueDate || '9999'));
+  return `<div class="list" id="task-list">${filtered.length ? filtered.map(taskRow).join('') : emptyState('✅','No tasks here','Add a task to get started')}</div>`;
+}
+function bindTaskRowActions() {
+  document.querySelectorAll('#task-list .row').forEach(row => {
+    const id = row.dataset.id;
+    row.querySelector('[data-action="toggle"]').addEventListener('click', () => {
+      const t = state.tasks.find(x => x.id === id); t.completed = !t.completed; persist('tasks'); render();
+      showToast(t.completed ? 'Task completed' : 'Task marked pending');
+    });
+    row.querySelector('[data-action="edit"]').addEventListener('click', () => openTaskModal(state.tasks.find(x => x.id === id)));
+    row.querySelector('[data-action="delete"]').addEventListener('click', () => {
+      confirmDialog('Delete task?', 'This task will be permanently removed.', () => {
+        state.tasks = state.tasks.filter(x => x.id !== id); persist('tasks'); render(); showToast('Task deleted');
+      });
+    });
+  });
+}
+function openTaskModal(task) {
+  const editing = !!task;
+  openModal(`
+    <div class="modal-head"><h3>${editing ? 'Edit task' : 'Add task'}</h3><button class="btn-icon" id="modal-close">✕</button></div>
+    <div class="field"><label>Title</label><input id="f-title" value="${esc(task?.title||'')}" placeholder="e.g. Finish report"></div>
+    <div class="field"><label>Due date</label><input id="f-due" type="date" value="${task?.dueDate||''}"></div>
+    <div class="field"><label>Priority</label>
+      <select id="f-priority">${['Low','Medium','High'].map(p=>`<option ${task?.priority===p?'selected':''}>${p}</option>`).join('')}</select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+      <button class="btn btn-primary" id="modal-save">${editing?'Save changes':'Add task'}</button>
+    </div>
+  `);
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('modal-cancel').addEventListener('click', closeModal);
+  document.getElementById('modal-save').addEventListener('click', () => {
+    const title = document.getElementById('f-title').value.trim();
+    if (!title) { showToast('Please enter a task title', 'error'); return; }
+    const data = { title, dueDate: document.getElementById('f-due').value, priority: document.getElementById('f-priority').value };
+    if (editing) { Object.assign(task, data); showToast('Task updated'); }
+    else { state.tasks.push({ id: uid(), completed: false, ...data }); showToast('Task added'); }
+    persist('tasks'); closeModal(); render();
+  });
+}
+
+/* ============================== PLANNER (continuous dates) ============================== */
+const PLANNER_SLOTS = ['Morning', 'Afternoon', 'Evening'];
+function shiftPlannerDate(days) {
+  const d = new Date(plannerDate + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  plannerDate = toLocalDateStr(d);
+  render();
+}
+function renderPlannerPage() {
+  const dayItems = state.planner.filter(p => p.date === plannerDate);
+  const grouped = {}; PLANNER_SLOTS.forEach(s => grouped[s] = []);
+  const customs = [];
+  dayItems.forEach(p => { if (PLANNER_SLOTS.includes(p.slot)) grouped[p.slot].push(p); else customs.push(p); });
+  const total = dayItems.length, done = dayItems.filter(p => p.completed).length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+
+  const slotBlock = (label, items) => `
+    <div class="section-title">${label}</div>
+    <div class="list">${items.length ? items.map(plannerRow).join('') : emptyState('☀️','Nothing planned','Add an activity for this slot')}</div>
+  `;
+  let customHtml = '';
+  if (customs.length) {
+    const byName = {}; customs.forEach(c => { (byName[c.slot] = byName[c.slot] || []).push(c); });
+    customHtml = Object.entries(byName).map(([name, items]) => slotBlock(name, items)).join('');
+  }
+  const isToday = plannerDate === todayISO();
+  return `
+    <div class="page-header">
+      <div><h2>Daily Planner</h2><div class="sub">Plan any day — dates are continuous, so you can move freely</div></div>
+    </div>
+    <div class="card" style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:16px; flex-wrap:wrap;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <button class="btn-icon" id="prev-day-btn">←</button>
+        <input type="date" id="planner-date-input" value="${plannerDate}" style="border:1px solid var(--border); border-radius:var(--radius-sm); padding:8px 10px; background:var(--surface); color:var(--ink); font-weight:700; font-size:13px;">
+        <button class="btn-icon" id="next-day-btn">→</button>
+        ${!isToday ? `<button class="btn btn-secondary btn-sm" id="today-btn">Today</button>` : ''}
+      </div>
+      <div style="min-width:130px;">
+        <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+        <div class="stat-sub" style="margin-top:4px;">${done}/${total} done · ${pct}%</div>
+      </div>
+    </div>
+    ${PLANNER_SLOTS.map(s => slotBlock(s, grouped[s])).join('')}
+    ${customHtml}
+  `;
+}
+function plannerRow(p) {
+  return `
+    <div class="row" data-id="${p.id}">
+      <div class="row-check ${p.completed?'checked':''}" data-action="toggle">${p.completed?'✓':''}</div>
+      <div class="row-main">
+        <div class="row-title ${p.completed?'done':''}">${esc(p.activity)}</div>
+        ${p.time ? `<div class="row-meta"><span>${esc(p.time)}</span></div>` : ''}
+      </div>
+      <div class="row-actions">
+        <button class="btn-icon" data-action="edit">✎</button>
+        <button class="btn-icon" data-action="delete">🗑</button>
+      </div>
+    </div>`;
+}
+function afterRenderPlanner() {
+  document.getElementById('prev-day-btn').addEventListener('click', () => shiftPlannerDate(-1));
+  document.getElementById('next-day-btn').addEventListener('click', () => shiftPlannerDate(1));
+  document.getElementById('planner-date-input').addEventListener('change', e => { plannerDate = e.target.value || todayISO(); render(); });
+  const todayBtn = document.getElementById('today-btn');
+  if (todayBtn) todayBtn.addEventListener('click', () => { plannerDate = todayISO(); render(); });
+  document.querySelectorAll('.list .row').forEach(row => {
+    const id = row.dataset.id;
+    row.querySelector('[data-action="toggle"]').addEventListener('click', () => {
+      const p = state.planner.find(x => x.id === id); p.completed = !p.completed; persist('planner'); render();
+    });
+    row.querySelector('[data-action="edit"]').addEventListener('click', () => openPlannerModal(state.planner.find(x => x.id === id)));
+    row.querySelector('[data-action="delete"]').addEventListener('click', () => {
+      confirmDialog('Delete activity?', 'This planner item will be permanently removed.', () => {
+        state.planner = state.planner.filter(x => x.id !== id); persist('planner'); render(); showToast('Activity deleted');
+      });
+    });
+  });
+}
+function openPlannerModal(item) {
+  const editing = !!item;
+  const isPreset = editing ? PLANNER_SLOTS.includes(item.slot) : true;
+  openModal(`
+    <div class="modal-head"><h3>${editing ? 'Edit activity' : 'Add activity'}</h3><button class="btn-icon" id="modal-close">✕</button></div>
+    <div class="field"><label>Activity</label><input id="f-activity" value="${esc(item?.activity||'')}" placeholder="e.g. Team standup"></div>
+    <div class="field"><label>Date</label><input id="f-date" type="date" value="${item?.date||plannerDate}"></div>
+    <div class="field"><label>Time slot</label>
+      <select id="f-slot">${PLANNER_SLOTS.map(s=>`<option ${item?.slot===s?'selected':''}>${s}</option>`).join('')}<option value="__custom" ${!isPreset?'selected':''}>Custom...</option></select>
+    </div>
+    <div class="field" id="custom-slot-wrap" style="display:${!isPreset?'block':'none'}"><label>Custom slot name</label><input id="f-custom-slot" value="${!isPreset?esc(item.slot):''}" placeholder="e.g. Late night"></div>
+    <div class="field"><label>Time (optional)</label><input id="f-time" type="time" value="${item?.time||''}"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+      <button class="btn btn-primary" id="modal-save">${editing?'Save changes':'Add activity'}</button>
+    </div>
+  `);
+  document.getElementById('f-slot').addEventListener('change', e => {
+    document.getElementById('custom-slot-wrap').style.display = e.target.value === '__custom' ? 'block' : 'none';
+  });
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('modal-cancel').addEventListener('click', closeModal);
+  document.getElementById('modal-save').addEventListener('click', () => {
+    const activity = document.getElementById('f-activity').value.trim();
+    if (!activity) { showToast('Please enter an activity', 'error'); return; }
+    let slot = document.getElementById('f-slot').value;
+    if (slot === '__custom') slot = document.getElementById('f-custom-slot').value.trim() || 'Custom';
+    const data = { activity, slot, time: document.getElementById('f-time').value, date: document.getElementById('f-date').value || plannerDate };
+    if (editing) { Object.assign(item, data); showToast('Activity updated'); }
+    else { state.planner.push({ id: uid(), completed: false, ...data }); showToast('Activity added'); }
+    persist('planner'); closeModal(); render();
+  });
+}
+
+/* ============================== FINANCE: Expenses + Income ============================== */
+function renderFinancePage() {
+  const today = todayISO();
+  const weekAgo = toLocalDateStr(new Date(Date.now() - 6 * 86400000));
+  const monthStart = today.slice(0, 7) + '-01';
+  const monthExpense = sum(state.expenses.filter(e => e.date >= monthStart));
+  const monthIncome = sum(state.income.filter(e => e.date >= monthStart));
+  const net = monthIncome - monthExpense;
+
+  const list = financeTab === 'income' ? state.income : state.expenses;
+  const cats = financeTab === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  const sorted = [...list].sort((a, b) => b.date.localeCompare(a.date));
+  const todayTotal = sum(list.filter(e => e.date === today));
+  const weekTotal = sum(list.filter(e => e.date >= weekAgo));
+  const monthTotal = sum(list.filter(e => e.date >= monthStart));
+
+  return `
+    <div class="page-header">
+      <div><h2>Finance</h2><div class="sub">Track spending and income together</div></div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-sm" id="finance-report-csv-btn">⬇ CSV</button>
+        <button class="btn btn-secondary btn-sm" id="finance-report-pdf-btn">⬇ PDF</button>
+      </div>
+    </div>
+    <div class="grid grid-3" style="margin-bottom:16px;">
+      <div class="card"><div class="card-title">Monthly income</div><div class="stat-value" style="color:var(--primary)">${fmtMoney(monthIncome)}</div></div>
+      <div class="card"><div class="card-title">Monthly expenses</div><div class="stat-value" style="color:var(--danger)">${fmtMoney(monthExpense)}</div></div>
+      <div class="card"><div class="card-title">Net this month</div><div class="stat-value" style="color:${net>=0?'var(--primary)':'var(--danger)'}">${net>=0?'+':''}${fmtMoney(net)}</div></div>
+    </div>
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-title">Income vs expenses — last 6 months</div>
+      <div class="chart-wrap"><canvas id="net-trend"></canvas></div>
+    </div>
+    <div class="tabs">
+      <div class="tab ${financeTab==='expense'?'active':''}" data-tab="expense">Expenses</div>
+      <div class="tab ${financeTab==='income'?'active':''}" data-tab="income">Income</div>
+    </div>
+    <div class="grid grid-3" style="margin-bottom:16px;">
+      <div class="card"><div class="card-title">Today</div><div class="stat-value">${fmtMoney(todayTotal)}</div></div>
+      <div class="card"><div class="card-title">This week</div><div class="stat-value">${fmtMoney(weekTotal)}</div></div>
+      <div class="card"><div class="card-title">This month</div><div class="stat-value">${fmtMoney(monthTotal)}</div></div>
+    </div>
+    <div class="card" style="margin-bottom:20px;">
+      <div class="card-title">${financeTab === 'income' ? 'Income' : 'Spending'} by category</div>
+      <div class="chart-wrap"><canvas id="finance-pie"></canvas></div>
+    </div>
+    <div class="section-title">All ${financeTab === 'income' ? 'income' : 'expenses'}</div>
+    <div class="list" id="finance-list">${sorted.length ? sorted.map(e => financeRow(e, cats)).join('') : emptyState(financeTab==='income'?'💵':'💰', `No ${financeTab} recorded yet`, `Add your first ${financeTab === 'income' ? 'income entry' : 'expense'} to see it here`)}</div>
+  `;
+}
+function financeRow(e, cats) {
+  return `
+    <div class="row" data-id="${e.id}">
+      <span class="chip-dot" style="background:${catColor(cats, e.category)}"></span>
+      <div class="row-main">
+        <div class="row-title">${esc(e.description || e.category)}</div>
+        <div class="row-meta"><span class="pill" style="background:${catColor(cats,e.category)}22; color:${catColor(cats,e.category)}">${e.category}</span><span>${fmtDate(e.date)}</span></div>
+      </div>
+      <div style="font-weight:800;">${fmtMoney(e.amount)}</div>
+      <div class="row-actions">
+        <button class="btn-icon" data-action="edit">✎</button>
+        <button class="btn-icon" data-action="delete">🗑</button>
+      </div>
+    </div>`;
+}
+function afterRenderFinance() {
+  document.querySelectorAll('[data-tab]').forEach(el => el.addEventListener('click', () => { financeTab = el.dataset.tab; render(); }));
+  document.getElementById('finance-report-csv-btn').addEventListener('click', downloadFinanceReport);
+  document.getElementById('finance-report-pdf-btn').addEventListener('click', downloadFinanceReportPDF);
+  const list = financeTab === 'income' ? state.income : state.expenses;
+  document.querySelectorAll('#finance-list .row').forEach(row => {
+    const id = row.dataset.id;
+    row.querySelector('[data-action="edit"]').addEventListener('click', () => {
+      const item = list.find(x => x.id === id);
+      openTransactionModal(financeTab, item);
+    });
+    row.querySelector('[data-action="delete"]').addEventListener('click', () => {
+      confirmDialog(`Delete ${financeTab}?`, 'This entry will be permanently removed.', () => {
+        if (financeTab === 'income') state.income = state.income.filter(x => x.id !== id);
+        else state.expenses = state.expenses.filter(x => x.id !== id);
+        persist(financeTab === 'income' ? 'income' : 'expenses'); render(); showToast('Entry deleted');
+      });
+    });
+  });
+  // Category pie for active tab
+  const cats = financeTab === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  const byCat = {}; list.forEach(e => { byCat[e.category] = (byCat[e.category] || 0) + Number(e.amount || 0); });
+  const labels = Object.keys(byCat);
+  if (labels.length) {
+    chartRefs.financePie = new Chart(document.getElementById('finance-pie'), {
+      type: 'doughnut',
+      data: { labels, datasets: [{ data: labels.map(l => byCat[l]), backgroundColor: labels.map(l => catColor(cats, l)), borderWidth: 0 }] },
+      options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, font: { size: 10 } } } }, maintainAspectRatio: false }
+    });
+  } else {
+    document.getElementById('finance-pie').parentElement.innerHTML = emptyState('📊','Nothing to chart yet','Add a few entries to see the breakdown');
+  }
+  // 6-month income vs expense trend
+  const months = [...Array(6)].map((_, i) => { const d = new Date(); d.setMonth(d.getMonth() - (5 - i)); return toLocalDateStr(d).slice(0, 7); });
+  const incomeByMonth = months.map(m => sum(state.income.filter(e => e.date.slice(0,7) === m)));
+  const expenseByMonth = months.map(m => sum(state.expenses.filter(e => e.date.slice(0,7) === m)));
+  chartRefs.netTrend = new Chart(document.getElementById('net-trend'), {
+    type: 'bar',
+    data: { labels: months, datasets: [
+      { label: 'Income', data: incomeByMonth, backgroundColor: '#0E7C66', borderRadius: 5 },
+      { label: 'Expenses', data: expenseByMonth, backgroundColor: '#D64545', borderRadius: 5 },
+    ] },
+    options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, font: { size: 10 } } } }, scales: { y: { beginAtZero: true, ticks: { font: { size: 9 } } }, x: { ticks: { font: { size: 9 } } } }, maintainAspectRatio: false }
+  });
+}
+function downloadFinanceReport() {
+  const rows = [['Type','Date','Category','Description','Amount']];
+  state.income.forEach(e => rows.push(['Income', e.date, e.category, e.description || '', e.amount]));
+  state.expenses.forEach(e => rows.push(['Expense', e.date, e.category, e.description || '', e.amount]));
+  downloadBlob(`finance-report-${todayISO()}.csv`, toCSV(rows), 'text/csv');
+  showToast('Report downloaded');
+}
+function downloadFinanceReportPDF() {
+  const totalIncome = sum(state.income);
+  const totalExpense = sum(state.expenses);
+  const rows = [];
+  state.income.forEach(e => rows.push(['Income', fmtDate(e.date), e.category, e.description || '', fmtMoneyPDF(e.amount)]));
+  state.expenses.forEach(e => rows.push(['Expense', fmtDate(e.date), e.category, e.description || '', fmtMoneyPDF(e.amount)]));
+  rows.sort((a, b) => a[1].localeCompare(b[1]));
+  downloadPDFReport(
+    'Finance Report — DailyLife',
+    ['Type','Date','Category','Description','Amount'],
+    rows,
+    `finance-report-${todayISO()}.pdf`,
+    [`Total income: ${fmtMoneyPDF(totalIncome)}`, `Total expenses: ${fmtMoneyPDF(totalExpense)}`, `Net balance: ${fmtMoneyPDF(totalIncome - totalExpense)}`]
+  );
+}
+let txModalType = 'expense';
+let txAmountBuffer = ''; // plain typed string, e.g. "1234.5" — integer digits first, decimal point after
+function txBufferToAmount() {
+  if (!txAmountBuffer || txAmountBuffer === '.') return 0;
+  const n = parseFloat(txAmountBuffer);
+  return isNaN(n) ? 0 : n;
+}
+function updateAmountDisplay() {
+  const el = document.getElementById('tx-amount-display');
+  if (el) el.textContent = '₹' + (txAmountBuffer || '0');
+}
+function pressAmountKey(k) {
+  if (k === '.') {
+    if (txAmountBuffer.includes('.')) return; // only one decimal point
+    txAmountBuffer = (txAmountBuffer === '' ? '0' : txAmountBuffer) + '.';
+  } else {
+    const dotIndex = txAmountBuffer.indexOf('.');
+    if (dotIndex !== -1 && txAmountBuffer.length - dotIndex - 1 >= 2) return; // max 2 decimal places
+    const intDigits = (dotIndex === -1 ? txAmountBuffer : txAmountBuffer.slice(0, dotIndex)).length;
+    if (dotIndex === -1 && intDigits >= 9) return; // sane cap on whole-number length
+    if (txAmountBuffer === '0') txAmountBuffer = k; // replace a lone leading zero
+    else txAmountBuffer += k;
+  }
+  updateAmountDisplay();
+}
+function buildAmountPad() {
+  const pad = document.getElementById('tx-amount-pad');
+  const keys = ['1','2','3','4','5','6','7','8','9','.','0','del'];
+  pad.innerHTML = keys.map(k => {
+    if (k === 'del') return `<button type="button" class="amount-key wide" id="amt-key-del">⌫</button>`;
+    return `<button type="button" class="amount-key" data-digit="${k}">${k}</button>`;
+  }).join('');
+  pad.querySelectorAll('[data-digit]').forEach(btn => btn.addEventListener('click', () => pressAmountKey(btn.dataset.digit)));
+  document.getElementById('amt-key-del').addEventListener('click', () => { txAmountBuffer = txAmountBuffer.slice(0, -1); updateAmountDisplay(); });
+  document.getElementById('tx-amount-clear').addEventListener('click', () => { txAmountBuffer = ''; updateAmountDisplay(); });
+}
+function populateCategorySelect(item) {
+  const sel = document.getElementById('f-category');
+  if (!sel) return;
+  const cats = txModalType === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  sel.innerHTML = cats.map(c => `<option ${item && item.category === c.name ? 'selected' : ''}>${c.name}</option>`).join('');
+}
+function openTransactionModal(initialType, item) {
+  const editing = !!item;
+  txModalType = editing ? (state.income.includes(item) ? 'income' : 'expense') : initialType;
+  txAmountBuffer = item ? String(Number(item.amount)) : '';
+  openModal(`
+    <div class="modal-head"><h3 id="tx-modal-title">${editing ? 'Edit' : 'Add'} ${txModalType === 'income' ? 'income' : 'expense'}</h3><button class="btn-icon" id="modal-close">✕</button></div>
+    <div class="tx-type-toggle" id="tx-type-toggle">
+      <button type="button" class="tx-type-btn expense ${txModalType==='expense'?'active':''}" data-type="expense">💸 Expense</button>
+      <button type="button" class="tx-type-btn income ${txModalType==='income'?'active':''}" data-type="income">💰 Income</button>
+    </div>
+    <div class="amount-display-row">
+      <div class="amount-display" id="tx-amount-display">₹0</div>
+      <button type="button" class="amount-clear-btn" id="tx-amount-clear">Clear</button>
+    </div>
+    <div class="amount-pad" id="tx-amount-pad"></div>
+    <div class="field"><label>Category</label><select id="f-category"></select></div>
+    <div class="field"><label>Description</label><input id="f-desc" value="${esc(item?.description||'')}" placeholder="e.g. Groceries"></div>
+    <div class="field"><label>Date</label><input id="f-date" type="date" value="${item?.date||todayISO()}"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+      <button class="btn btn-primary" id="modal-save">${editing?'Save changes':'Add'}</button>
+    </div>
+  `);
+  buildAmountPad();
+  updateAmountDisplay();
+  populateCategorySelect(item);
+  document.querySelectorAll('#tx-type-toggle .tx-type-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      txModalType = btn.dataset.type;
+      document.querySelectorAll('#tx-type-toggle .tx-type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === txModalType));
+      document.getElementById('tx-modal-title').textContent = `${editing ? 'Edit' : 'Add'} ${txModalType === 'income' ? 'income' : 'expense'}`;
+      populateCategorySelect(null);
+    });
+  });
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('modal-cancel').addEventListener('click', closeModal);
+  document.getElementById('modal-save').addEventListener('click', () => {
+    const amount = txBufferToAmount();
+    if (!amount || amount <= 0) { showToast('Please enter a valid amount', 'error'); return; }
+    const data = { amount, category: document.getElementById('f-category').value, description: document.getElementById('f-desc').value.trim(), date: document.getElementById('f-date').value || todayISO() };
+    if (editing) {
+      const wasIncome = state.income.includes(item);
+      const wasType = wasIncome ? 'income' : 'expense';
+      if (wasType !== txModalType) {
+        if (wasIncome) state.income = state.income.filter(x => x !== item);
+        else state.expenses = state.expenses.filter(x => x !== item);
+        Object.assign(item, data);
+        (txModalType === 'income' ? state.income : state.expenses).push(item);
+        persist('income'); persist('expenses');
+      } else {
+        Object.assign(item, data);
+        persist(txModalType === 'income' ? 'income' : 'expenses');
+      }
+      showToast((txModalType === 'income' ? 'Income' : 'Expense') + ' updated');
+    } else {
+      (txModalType === 'income' ? state.income : state.expenses).push({ id: uid(), ...data });
+      persist(txModalType === 'income' ? 'income' : 'expenses');
+      showToast((txModalType === 'income' ? 'Income' : 'Expense') + ' added');
+    }
+    closeModal(); render();
+  });
+}
+
+/* ============================== SHOPPING ============================== */
+function renderShoppingPage() {
+  const pending = state.shopping.filter(i => !i.purchased);
+  const purchased = state.shopping.filter(i => i.purchased);
+  return `
+    <div class="page-header">
+      <div><h2>Shopping List</h2><div class="sub">${pending.length} to buy</div></div>
+    </div>
+    ${state.shopping.length ? `<div class="card" style="margin-bottom:16px;"><div class="card-title">By category</div><div class="chart-wrap" style="height:170px;"><canvas id="shop-chart"></canvas></div></div>` : ''}
+    <div class="section-title">To buy</div>
+    <div class="list" id="shop-pending">${pending.length ? pending.map(shopRow).join('') : emptyState('🛒','List is empty','Add items you need to buy')}</div>
+    ${purchased.length ? `
+      <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>Purchased (${purchased.length})</span>
+        <button class="btn btn-ghost btn-sm" id="clear-purchased-btn">Clear purchased</button>
+      </div>
+      <div class="list" id="shop-purchased">${purchased.map(shopRow).join('')}</div>` : ''}
+  `;
+}
+function shopRow(i) {
+  return `
+    <div class="row" data-id="${i.id}">
+      <div class="row-check ${i.purchased?'checked':''}" data-action="toggle">${i.purchased?'✓':''}</div>
+      <span class="chip-dot" style="background:${catColor(SHOPPING_CATEGORIES, i.category)}"></span>
+      <div class="row-main">
+        <div class="row-title ${i.purchased?'done':''}">${esc(i.name)} ${i.quantity ? `<span style="color:var(--muted); font-weight:600;">× ${esc(i.quantity)}</span>` : ''}</div>
+        <div class="row-meta"><span class="pill" style="background:${catColor(SHOPPING_CATEGORIES,i.category)}22; color:${catColor(SHOPPING_CATEGORIES,i.category)}">${i.category}</span></div>
+      </div>
+      <div class="row-actions">
+        <button class="btn-icon" data-action="edit">✎</button>
+        <button class="btn-icon" data-action="delete">🗑</button>
+      </div>
+    </div>`;
+}
+function afterRenderShopping() {
+  const clearBtn = document.getElementById('clear-purchased-btn');
+  if (clearBtn) clearBtn.addEventListener('click', () => {
+    confirmDialog('Clear purchased items?', 'All purchased items will be removed from the list.', () => {
+      state.shopping = state.shopping.filter(x => !x.purchased); persist('shopping'); render(); showToast('Purchased items cleared');
+    });
+  });
+  document.querySelectorAll('#shop-pending .row, #shop-purchased .row').forEach(row => {
+    const id = row.dataset.id;
+    row.querySelector('[data-action="toggle"]').addEventListener('click', () => {
+      const i = state.shopping.find(x => x.id === id); i.purchased = !i.purchased; persist('shopping'); render();
+    });
+    row.querySelector('[data-action="edit"]').addEventListener('click', () => openShopModal(state.shopping.find(x => x.id === id)));
+    row.querySelector('[data-action="delete"]').addEventListener('click', () => {
+      confirmDialog('Delete item?', 'This item will be permanently removed.', () => {
+        state.shopping = state.shopping.filter(x => x.id !== id); persist('shopping'); render(); showToast('Item deleted');
+      });
+    });
+  });
+  if (state.shopping.length) {
+    const byCat = {}; state.shopping.forEach(i => { byCat[i.category] = (byCat[i.category] || 0) + 1; });
+    const labels = Object.keys(byCat);
+    chartRefs.shop = new Chart(document.getElementById('shop-chart'), {
+      type: 'doughnut',
+      data: { labels, datasets: [{ data: labels.map(l => byCat[l]), backgroundColor: labels.map(l => catColor(SHOPPING_CATEGORIES, l)), borderWidth: 0 }] },
+      options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, font: { size: 10 } } } }, maintainAspectRatio: false }
+    });
+  }
+}
+function openShopModal(item) {
+  const editing = !!item;
+  openModal(`
+    <div class="modal-head"><h3>${editing?'Edit item':'Add item'}</h3><button class="btn-icon" id="modal-close">✕</button></div>
+    <div class="field"><label>Item name</label><input id="f-name" value="${esc(item?.name||'')}" placeholder="e.g. Milk"></div>
+    <div class="field-row">
+      <div class="field"><label>Quantity</label><input id="f-qty" value="${esc(item?.quantity||'')}" placeholder="e.g. 2"></div>
+      <div class="field"><label>Category</label><select id="f-cat">${SHOPPING_CATEGORIES.map(c=>`<option ${item?.category===c.name?'selected':''}>${c.name}</option>`).join('')}</select></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+      <button class="btn btn-primary" id="modal-save">${editing?'Save changes':'Add item'}</button>
+    </div>
+  `);
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('modal-cancel').addEventListener('click', closeModal);
+  document.getElementById('modal-save').addEventListener('click', () => {
+    const name = document.getElementById('f-name').value.trim();
+    if (!name) { showToast('Please enter an item name', 'error'); return; }
+    const data = { name, quantity: document.getElementById('f-qty').value.trim(), category: document.getElementById('f-cat').value };
+    if (editing) { Object.assign(item, data); showToast('Item updated'); }
+    else { state.shopping.push({ id: uid(), purchased: false, ...data }); showToast('Item added'); }
+    persist('shopping'); closeModal(); render();
+  });
+}
+
+/* ============================== REMINDERS ============================== */
+function renderRemindersPage() {
+  const sorted = [...state.reminders].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  return `
+    <div class="page-header">
+      <div><h2>Reminders</h2><div class="sub">Never miss what matters</div></div>
+    </div>
+    ${state.reminders.length ? `<div class="card" style="margin-bottom:16px;"><div class="card-title">By priority</div><div class="chart-wrap" style="height:150px;"><canvas id="reminder-chart"></canvas></div></div>` : ''}
+    <div class="list" id="reminder-list">${sorted.length ? sorted.map(reminderRow).join('') : emptyState('🔔','No reminders set','Create one so you never forget')}</div>
+  `;
+}
+function reminderRow(r) {
+  const past = daysBetween(r.date) < 0;
+  return `
+    <div class="row" data-id="${r.id}">
+      <div class="row-main">
+        <div class="row-title">${esc(r.title)}</div>
+        <div class="row-meta">
+          <span class="pill pill-${r.priority.toLowerCase()}">${r.priority}</span>
+          <span style="color:${past?'var(--danger)':'var(--muted)'}">${fmtDate(r.date)}${r.time ? ' · ' + r.time : ''}</span>
+          ${r.repeat && r.repeat !== 'None' ? `<span>↻ ${r.repeat}</span>` : ''}
+        </div>
+        ${r.description ? `<div class="row-meta">${esc(r.description)}</div>` : ''}
+      </div>
+      <div class="row-actions">
+        <button class="btn-icon" data-action="edit">✎</button>
+        <button class="btn-icon" data-action="delete">🗑</button>
+      </div>
+    </div>`;
+}
+function afterRenderReminders() {
+  document.querySelectorAll('#reminder-list .row').forEach(row => {
+    const id = row.dataset.id;
+    row.querySelector('[data-action="edit"]').addEventListener('click', () => openReminderModal(state.reminders.find(x => x.id === id)));
+    row.querySelector('[data-action="delete"]').addEventListener('click', () => {
+      confirmDialog('Delete reminder?', 'This reminder will be permanently removed.', () => {
+        state.reminders = state.reminders.filter(x => x.id !== id); persist('reminders'); render(); showToast('Reminder deleted');
+      });
+    });
+  });
+  if (state.reminders.length) {
+    const byP = { Low: 0, Medium: 0, High: 0 };
+    state.reminders.forEach(r => byP[r.priority] = (byP[r.priority] || 0) + 1);
+    chartRefs.reminder = new Chart(document.getElementById('reminder-chart'), {
+      type: 'bar',
+      data: { labels: Object.keys(byP), datasets: [{ data: Object.values(byP), backgroundColor: ['#0E7C66','#E8A33D','#D64545'], borderRadius: 6 }] },
+      options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { font: { size: 9 } } }, y: { ticks: { font: { size: 10 } } } }, maintainAspectRatio: false }
+    });
+  }
+}
+function openReminderModal(item) {
+  const editing = !!item;
+  openModal(`
+    <div class="modal-head"><h3>${editing?'Edit reminder':'Add reminder'}</h3><button class="btn-icon" id="modal-close">✕</button></div>
+    <div class="field"><label>Title</label><input id="f-title" value="${esc(item?.title||'')}" placeholder="e.g. Call the dentist"></div>
+    <div class="field"><label>Description</label><textarea id="f-desc">${esc(item?.description||'')}</textarea></div>
+    <div class="field-row">
+      <div class="field"><label>Date</label><input id="f-date" type="date" value="${item?.date||todayISO()}"></div>
+      <div class="field"><label>Time</label><input id="f-time" type="time" value="${item?.time||''}"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Repeat</label><select id="f-repeat">${REPEAT_OPTIONS.map(o=>`<option ${item?.repeat===o?'selected':''}>${o}</option>`).join('')}</select></div>
+      <div class="field"><label>Priority</label><select id="f-priority">${['Low','Medium','High'].map(p=>`<option ${item?.priority===p?'selected':''}>${p}</option>`).join('')}</select></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+      <button class="btn btn-primary" id="modal-save">${editing?'Save changes':'Add reminder'}</button>
+    </div>
+  `);
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('modal-cancel').addEventListener('click', closeModal);
+  document.getElementById('modal-save').addEventListener('click', () => {
+    const title = document.getElementById('f-title').value.trim();
+    if (!title) { showToast('Please enter a title', 'error'); return; }
+    const data = { title, description: document.getElementById('f-desc').value.trim(), date: document.getElementById('f-date').value || todayISO(), time: document.getElementById('f-time').value, repeat: document.getElementById('f-repeat').value, priority: document.getElementById('f-priority').value };
+    if (editing) { Object.assign(item, data); showToast('Reminder updated'); }
+    else { state.reminders.push({ id: uid(), ...data }); showToast('Reminder added'); }
+    persist('reminders'); closeModal(); render();
+  });
+}
+
+/* ============================== NOTES ============================== */
+function renderNotesPage() {
+  const filtered = state.notes.filter(n => !notesSearch || n.title.toLowerCase().includes(notesSearch.toLowerCase()) || n.body.toLowerCase().includes(notesSearch.toLowerCase()));
+  const pinned = filtered.filter(n => n.pinned);
+  const rest = filtered.filter(n => !n.pinned);
+  return `
+    <div class="page-header">
+      <div><h2>Notes</h2><div class="sub">${state.notes.length} notes</div></div>
+    </div>
+    ${state.notes.length ? `<div class="card" style="margin-bottom:16px; display:flex; gap:20px; align-items:center;">
+      <div><div class="card-title">Total</div><div class="stat-value">${state.notes.length}</div></div>
+      <div><div class="card-title">Pinned</div><div class="stat-value">${state.notes.filter(n=>n.pinned).length}</div></div>
+      <div style="flex:1; max-width:160px; height:70px;"><canvas id="note-chart"></canvas></div>
+    </div>` : ''}
+    <div class="searchbar"><span class="ic">🔍</span><input id="note-search" placeholder="Search notes..." value="${esc(notesSearch)}"></div>
+    ${pinned.length ? `<div class="section-title">📌 Pinned</div><div class="grid grid-3" id="pinned-notes">${pinned.map(noteCard).join('')}</div>` : ''}
+    <div class="section-title">${pinned.length ? 'All notes' : ''}</div>
+    <div class="grid grid-3" id="note-grid">${rest.length ? rest.map(noteCard).join('') : (filtered.length===0 ? emptyState('📝','No notes found','Create a note to capture your thoughts') : '')}</div>
+  `;
+}
+function noteCard(n) {
+  return `
+    <div class="note-card ${n.pinned?'pinned':''}" data-id="${n.id}">
+      ${n.pinned ? '<span class="pin-badge">📌</span>' : ''}
+      <div class="note-title">${esc(n.title)}</div>
+      <div class="note-body">${esc(n.body)}</div>
+      <div class="note-date">${fmtDate(n.updatedAt)}</div>
+    </div>`;
+}
+function afterRenderNotes() {
+  const searchInput = document.getElementById('note-search');
+  searchInput.addEventListener('input', e => {
+    notesSearch = e.target.value;
+    render();
+    const el = document.getElementById('note-search');
+    el.focus(); el.setSelectionRange(notesSearch.length, notesSearch.length);
+  });
+  document.querySelectorAll('.note-card').forEach(card => {
+    card.addEventListener('click', () => openNoteModal(state.notes.find(x => x.id === card.dataset.id)));
+  });
+  if (state.notes.length) {
+    const pinned = state.notes.filter(n => n.pinned).length;
+    chartRefs.note = new Chart(document.getElementById('note-chart'), {
+      type: 'doughnut',
+      data: { labels: ['Pinned','Unpinned'], datasets: [{ data: [pinned, state.notes.length - pinned], backgroundColor: ['#E8A33D','#E7E3DA'], borderWidth: 0 }] },
+      options: { plugins: { legend: { display: false } }, maintainAspectRatio: false, cutout: '70%' }
+    });
+  }
+}
+function openNoteModal(item) {
+  const editing = !!item;
+  openModal(`
+    <div class="modal-head"><h3>${editing?'Edit note':'New note'}</h3><button class="btn-icon" id="modal-close">✕</button></div>
+    <div class="field"><label>Title</label><input id="f-title" value="${esc(item?.title||'')}" placeholder="Note title"></div>
+    <div class="field"><label>Content</label><textarea id="f-body" style="min-height:120px;">${esc(item?.body||'')}</textarea></div>
+    <div class="field" style="display:flex; align-items:center; gap:8px;">
+      <input type="checkbox" id="f-pinned" ${item?.pinned?'checked':''} style="width:auto;"> <label style="margin:0;">Pin this note</label>
+    </div>
+    <div class="modal-actions">
+      ${editing ? '<button class="btn btn-danger" id="modal-delete">Delete</button>' : ''}
+      <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+      <button class="btn btn-primary" id="modal-save">${editing?'Save changes':'Create note'}</button>
+    </div>
+  `);
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('modal-cancel').addEventListener('click', closeModal);
+  if (editing) document.getElementById('modal-delete').addEventListener('click', () => {
+    confirmDialog('Delete note?', 'This note will be permanently removed.', () => {
+      state.notes = state.notes.filter(x => x.id !== item.id); persist('notes'); closeModal(); render(); showToast('Note deleted');
+    });
+  });
+  document.getElementById('modal-save').addEventListener('click', () => {
+    const title = document.getElementById('f-title').value.trim();
+    if (!title) { showToast('Please enter a title', 'error'); return; }
+    const data = { title, body: document.getElementById('f-body').value.trim(), pinned: document.getElementById('f-pinned').checked, updatedAt: todayISO() };
+    if (editing) { Object.assign(item, data); showToast('Note updated'); }
+    else { state.notes.push({ id: uid(), ...data }); showToast('Note created'); }
+    persist('notes'); closeModal(); render();
+  });
+}
+
+/* ============================== BILLS & SUBSCRIPTIONS ============================== */
+function renderBillsPage() {
+  const sorted = [...state.bills].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const upcoming = sorted.filter(b => b.status !== 'Paid' && daysBetween(b.dueDate) >= 0 && daysBetween(b.dueDate) <= 7);
+  const pendingTotal = sum(sorted.filter(b => b.status !== 'Paid'));
+  return `
+    <div class="page-header">
+      <div><h2>Bills & Subscriptions</h2><div class="sub">${sorted.filter(b=>b.status!=='Paid').length} pending · ${fmtMoney(pendingTotal)}</div></div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-sm" id="bills-report-csv-btn">⬇ CSV</button>
+        <button class="btn btn-secondary btn-sm" id="bills-report-pdf-btn">⬇ PDF</button>
+      </div>
+    </div>
+    ${upcoming.length ? `<div class="alert-banner warn">⏰ ${upcoming.length} payment${upcoming.length>1?'s':''} due within 7 days</div>` : ''}
+    ${sorted.length ? `<div class="card" style="margin-bottom:16px;"><div class="card-title">Status breakdown</div><div class="chart-wrap" style="height:170px;"><canvas id="bill-chart"></canvas></div></div>` : ''}
+    <div class="list" id="bill-list">${sorted.length ? sorted.map(billRow).join('') : emptyState('💳','No bills tracked yet','Add a recurring payment with the + button below')}</div>
+  `;
+}
+function billRow(b) {
+  const d = daysBetween(b.dueDate);
+  const overdue = b.status !== 'Paid' && d < 0;
+  const statusColor = b.status === 'Paid' ? 'var(--primary)' : overdue ? 'var(--danger)' : 'var(--accent)';
+  return `
+    <div class="row" data-id="${b.id}">
+      <div class="row-main">
+        <div class="row-title">${esc(b.name)}</div>
+        <div class="row-meta">
+          <span class="pill" style="background:${statusColor}22; color:${statusColor}">${overdue && b.status!=='Paid' ? 'Overdue' : b.status}</span>
+          <span>Due ${fmtDate(b.dueDate)}</span>
+          <span>↻ ${b.repeat}</span>
+        </div>
+      </div>
+      <div style="font-weight:800;">${fmtMoney(b.amount)}</div>
+      <div class="row-actions">
+        <button class="btn-icon" data-action="edit">✎</button>
+        <button class="btn-icon" data-action="delete">🗑</button>
+      </div>
+    </div>`;
+}
+function afterRenderBills() {
+  document.getElementById('bills-report-csv-btn').addEventListener('click', downloadBillsReport);
+  document.getElementById('bills-report-pdf-btn').addEventListener('click', downloadBillsReportPDF);
+  document.querySelectorAll('#bill-list .row').forEach(row => {
+    const id = row.dataset.id;
+    row.querySelector('[data-action="edit"]').addEventListener('click', () => openBillModal(state.bills.find(x => x.id === id)));
+    row.querySelector('[data-action="delete"]').addEventListener('click', () => {
+      confirmDialog('Delete bill?', 'This bill will be permanently removed.', () => {
+        state.bills = state.bills.filter(x => x.id !== id); persist('bills'); render(); showToast('Bill deleted');
+      });
+    });
+  });
+  if (state.bills.length) {
+    const byStatus = { Paid: 0, Upcoming: 0, Overdue: 0 };
+    state.bills.forEach(b => { const st = b.status === 'Paid' ? 'Paid' : (daysBetween(b.dueDate) < 0 ? 'Overdue' : 'Upcoming'); byStatus[st]++; });
+    chartRefs.bill = new Chart(document.getElementById('bill-chart'), {
+      type: 'doughnut',
+      data: { labels: Object.keys(byStatus), datasets: [{ data: Object.values(byStatus), backgroundColor: ['#0E7C66','#E8A33D','#D64545'], borderWidth: 0 }] },
+      options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, font: { size: 10 } } } }, maintainAspectRatio: false }
+    });
+  }
+}
+function downloadBillsReport() {
+  const rows = [['Name','Amount','Due Date','Repeat','Status']];
+  state.bills.forEach(b => rows.push([b.name, b.amount, b.dueDate, b.repeat, b.status]));
+  downloadBlob(`bills-report-${todayISO()}.csv`, toCSV(rows), 'text/csv');
+  showToast('Report downloaded');
+}
+function downloadBillsReportPDF() {
+  const pendingTotal = sum(state.bills.filter(b => b.status !== 'Paid'));
+  const rows = [...state.bills]
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+    .map(b => [b.name, fmtMoneyPDF(b.amount), fmtDate(b.dueDate), b.repeat, b.status]);
+  downloadPDFReport(
+    'Bills & Subscriptions — DailyLife',
+    ['Name','Amount','Due Date','Repeat','Status'],
+    rows,
+    `bills-report-${todayISO()}.pdf`,
+    [`Total pending: ${fmtMoneyPDF(pendingTotal)}`, `Total tracked bills: ${state.bills.length}`]
+  );
+}
+function openBillModal(item) {
+  const editing = !!item;
+  openModal(`
+    <div class="modal-head"><h3>${editing?'Edit bill':'Add bill'}</h3><button class="btn-icon" id="modal-close">✕</button></div>
+    <div class="field"><label>Name</label><input id="f-name" value="${esc(item?.name||'')}" placeholder="e.g. Electricity"></div>
+    <div class="field-row">
+      <div class="field"><label>Amount</label><input id="f-amount" type="number" step="0.01" value="${item?.amount??''}"></div>
+      <div class="field"><label>Due date</label><input id="f-due" type="date" value="${item?.dueDate||todayISO()}"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Repeat</label><select id="f-repeat">${REPEAT_OPTIONS.filter(o=>o!=='None').map(o=>`<option ${item?.repeat===o?'selected':''}>${o}</option>`).join('')}</select></div>
+      <div class="field"><label>Status</label><select id="f-status">${BILL_STATUS.map(s=>`<option ${item?.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+      <button class="btn btn-primary" id="modal-save">${editing?'Save changes':'Add bill'}</button>
+    </div>
+  `);
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('modal-cancel').addEventListener('click', closeModal);
+  document.getElementById('modal-save').addEventListener('click', () => {
+    const name = document.getElementById('f-name').value.trim();
+    const amount = parseFloat(document.getElementById('f-amount').value);
+    if (!name || !amount) { showToast('Please fill in name and amount', 'error'); return; }
+    const data = { name, amount, dueDate: document.getElementById('f-due').value || todayISO(), repeat: document.getElementById('f-repeat').value, status: document.getElementById('f-status').value };
+    if (editing) { Object.assign(item, data); showToast('Bill updated'); }
+    else { state.bills.push({ id: uid(), ...data }); showToast('Bill added'); }
+    persist('bills'); closeModal(); render();
+  });
+}
+
+/* ============================== DOCUMENTS & WARRANTY ============================== */
+function renderDocumentsPage() {
+  const sorted = [...state.documents].sort((a, b) => (a.expiryDate||'9999').localeCompare(b.expiryDate||'9999'));
+  const expiringSoon = sorted.filter(d => d.expiryDate && daysBetween(d.expiryDate) >= 0 && daysBetween(d.expiryDate) <= 30);
+  return `
+    <div class="page-header">
+      <div><h2>Documents & Warranty</h2><div class="sub">Track important documents & warranties</div></div>
+    </div>
+    ${expiringSoon.map(d => `<div class="alert-banner">⚠️ ${esc(d.name)} expires in ${daysBetween(d.expiryDate)} day${daysBetween(d.expiryDate)===1?'':'s'}.</div>`).join('')}
+    ${sorted.length ? `<div class="card" style="margin-bottom:16px;"><div class="card-title">Expiry status</div><div class="chart-wrap" style="height:170px;"><canvas id="doc-chart"></canvas></div></div>` : ''}
+    <div class="list" id="doc-list">${sorted.length ? sorted.map(docRow).join('') : emptyState('📄','No documents saved','Add a document or warranty with the + button below')}</div>
+  `;
+}
+function docRow(d) {
+  const days = d.expiryDate ? daysBetween(d.expiryDate) : null;
+  const expired = days !== null && days < 0;
+  const soon = days !== null && days >= 0 && days <= 30;
+  return `
+    <div class="row" data-id="${d.id}">
+      <div class="row-main">
+        <div class="row-title">${esc(d.name)}</div>
+        <div class="row-meta">
+          <span class="pill" style="background:var(--surface-2); color:var(--muted);">${d.type}</span>
+          ${d.expiryDate ? `<span style="color:${expired?'var(--danger)':soon?'var(--accent)':'var(--muted)'}">${expired?'Expired ':'Expires '}${fmtDate(d.expiryDate)}</span>` : '<span>No expiry</span>'}
+        </div>
+        ${d.notes ? `<div class="row-meta">${esc(d.notes)}</div>` : ''}
+      </div>
+      <div class="row-actions">
+        <button class="btn-icon" data-action="edit">✎</button>
+        <button class="btn-icon" data-action="delete">🗑</button>
+      </div>
+    </div>`;
+}
+function afterRenderDocuments() {
+  document.querySelectorAll('#doc-list .row').forEach(row => {
+    const id = row.dataset.id;
+    row.querySelector('[data-action="edit"]').addEventListener('click', () => openDocModal(state.documents.find(x => x.id === id)));
+    row.querySelector('[data-action="delete"]').addEventListener('click', () => {
+      confirmDialog('Delete document?', 'This document record will be permanently removed.', () => {
+        state.documents = state.documents.filter(x => x.id !== id); persist('documents'); render(); showToast('Document deleted');
+      });
+    });
+  });
+  if (state.documents.length) {
+    const buckets = { Expired: 0, 'Expiring soon': 0, Valid: 0, 'No expiry': 0 };
+    state.documents.forEach(d => {
+      if (!d.expiryDate) buckets['No expiry']++;
+      else { const n = daysBetween(d.expiryDate); if (n < 0) buckets.Expired++; else if (n <= 30) buckets['Expiring soon']++; else buckets.Valid++; }
+    });
+    chartRefs.doc = new Chart(document.getElementById('doc-chart'), {
+      type: 'doughnut',
+      data: { labels: Object.keys(buckets), datasets: [{ data: Object.values(buckets), backgroundColor: ['#D64545','#E8A33D','#0E7C66','#8A8578'], borderWidth: 0 }] },
+      options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, font: { size: 10 } } } }, maintainAspectRatio: false }
+    });
+  }
+}
+function openDocModal(item) {
+  const editing = !!item;
+  openModal(`
+    <div class="modal-head"><h3>${editing?'Edit document':'Add document'}</h3><button class="btn-icon" id="modal-close">✕</button></div>
+    <div class="field"><label>Document / product name</label><input id="f-name" value="${esc(item?.name||'')}" placeholder="e.g. Laptop warranty"></div>
+    <div class="field"><label>Type</label><select id="f-type">${DOC_TYPES.map(t=>`<option ${item?.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
+    <div class="field"><label>Expiry date</label><input id="f-expiry" type="date" value="${item?.expiryDate||''}"></div>
+    <div class="field"><label>Notes</label><textarea id="f-notes">${esc(item?.notes||'')}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+      <button class="btn btn-primary" id="modal-save">${editing?'Save changes':'Add document'}</button>
+    </div>
+  `);
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('modal-cancel').addEventListener('click', closeModal);
+  document.getElementById('modal-save').addEventListener('click', () => {
+    const name = document.getElementById('f-name').value.trim();
+    if (!name) { showToast('Please enter a name', 'error'); return; }
+    const data = { name, type: document.getElementById('f-type').value, expiryDate: document.getElementById('f-expiry').value, notes: document.getElementById('f-notes').value.trim() };
+    if (editing) { Object.assign(item, data); showToast('Document updated'); }
+    else { state.documents.push({ id: uid(), ...data }); showToast('Document added'); }
+    persist('documents'); closeModal(); render();
+  });
+}
+
+/* ============================== DASHBOARD ============================== */
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+function renderDashboard() {
+  const today = todayISO();
+  const todaysTasks = state.tasks.filter(t => t.dueDate === today);
+  const completedToday = todaysTasks.filter(t => t.completed).length;
+  const pendingTasks = state.tasks.filter(t => !t.completed);
+  const upcomingReminders = [...state.reminders].filter(r => daysBetween(r.date) >= 0).sort((a,b)=>a.date.localeCompare(b.date)).slice(0, 4);
+  const todayExpenseTotal = sum(state.expenses.filter(e => e.date === today));
+  const monthExpenseTotal = sum(state.expenses.filter(e => e.date.slice(0,7) === today.slice(0,7)));
+  const monthIncomeTotal = sum(state.income.filter(e => e.date.slice(0,7) === today.slice(0,7)));
+  const netMonth = monthIncomeTotal - monthExpenseTotal;
+  const shoppingPending = state.shopping.filter(i => !i.purchased);
+  const upcomingBills = [...state.bills].filter(b => b.status !== 'Paid').sort((a,b)=>a.dueDate.localeCompare(b.dueDate)).slice(0, 4);
+  const todaysPlan = state.planner.filter(p => p.date === today);
+  const totalTasksToday = todaysTasks.length;
+  const pct = totalTasksToday ? Math.round((completedToday / totalTasksToday) * 100) : 0;
+  const dateStr = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const name = state.settings.profile.name;
+
+  return `
+    <div class="page-header">
+      <div><h2>${greeting()}${name ? ', ' + esc(name.split(' ')[0]) : ''} 👋</h2><div class="sub">${dateStr}</div></div>
+    </div>
+
+    <div class="grid grid-4" style="margin-bottom:16px;">
+      <div class="card">
+        <div class="card-title">Today's tasks</div>
+        <div class="stat-value">${completedToday}/${totalTasksToday}</div>
+        <div class="progress-track" style="margin-top:10px;"><div class="progress-fill" style="width:${pct}%"></div></div>
+        <div class="stat-sub">${pct}% complete</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Pending tasks</div>
+        <div class="stat-value">${pendingTasks.length}</div>
+        <div class="stat-sub">across all due dates</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Net this month</div>
+        <div class="stat-value" style="color:${netMonth>=0?'var(--primary)':'var(--danger)'}">${netMonth>=0?'+':''}${fmtMoney(netMonth)}</div>
+        <div class="stat-sub">${fmtMoney(todayExpenseTotal)} spent today</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Shopping list</div>
+        <div class="stat-value">${shoppingPending.length}</div>
+        <div class="stat-sub">items left to buy</div>
+      </div>
+    </div>
+
+    <div class="grid grid-2">
+      <div class="card">
+        <div class="card-title">Today's tasks</div>
+        <div class="list">${todaysTasks.length ? todaysTasks.slice(0,5).map(t => `
+          <div class="row" style="padding:10px 12px;">
+            <div class="row-check ${t.completed?'checked':''}">${t.completed?'✓':''}</div>
+            <div class="row-main"><div class="row-title ${t.completed?'done':''}" style="font-size:13.5px;">${esc(t.title)}</div></div>
+            <span class="pill pill-${t.priority.toLowerCase()}">${t.priority}</span>
+          </div>`).join('') : emptyState('✅','Nothing due today','Enjoy the free time, or plan ahead')}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Upcoming reminders</div>
+        <div class="list">${upcomingReminders.length ? upcomingReminders.map(r => `
+          <div class="row" style="padding:10px 12px;">
+            <div class="row-main"><div class="row-title" style="font-size:13.5px;">${esc(r.title)}</div><div class="row-meta">${fmtDate(r.date)}${r.time?' · '+r.time:''}</div></div>
+            <span class="pill pill-${r.priority.toLowerCase()}">${r.priority}</span>
+          </div>`).join('') : emptyState('🔔','No upcoming reminders','You are all caught up')}</div>
+      </div>
+    </div>
+
+    <div class="grid grid-2" style="margin-top:14px;">
+      <div class="card">
+        <div class="card-title">Monthly spending by category</div>
+        <div class="chart-wrap"><canvas id="dash-pie"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Upcoming bills</div>
+        <div class="list">${upcomingBills.length ? upcomingBills.map(b => `
+          <div class="row" style="padding:10px 12px;">
+            <div class="row-main"><div class="row-title" style="font-size:13.5px;">${esc(b.name)}</div><div class="row-meta">Due ${fmtDate(b.dueDate)}</div></div>
+            <div style="font-weight:800; font-size:13.5px;">${fmtMoney(b.amount)}</div>
+          </div>`).join('') : emptyState('💳','No pending bills','You are on top of your payments')}</div>
+      </div>
+    </div>
+
+    <div class="grid grid-2" style="margin-top:14px;">
+      <div class="card">
+        <div class="card-title">Today's plan</div>
+        <div class="list">${todaysPlan.length ? todaysPlan.slice(0,5).map(p => `
+          <div class="row" style="padding:10px 12px;">
+            <div class="row-check ${p.completed?'checked':''}">${p.completed?'✓':''}</div>
+            <div class="row-main"><div class="row-title ${p.completed?'done':''}" style="font-size:13.5px;">${esc(p.activity)}</div><div class="row-meta">${esc(p.slot)}${p.time?' · '+p.time:''}</div></div>
+          </div>`).join('') : emptyState('📅','Nothing planned today','Head to Planner to map out your day')}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Shopping items</div>
+        <div class="list">${shoppingPending.length ? shoppingPending.slice(0,5).map(i => `
+          <div class="row" style="padding:10px 12px;">
+            <span class="chip-dot" style="background:${catColor(SHOPPING_CATEGORIES, i.category)}"></span>
+            <div class="row-main"><div class="row-title" style="font-size:13.5px;">${esc(i.name)}</div></div>
+          </div>`).join('') : emptyState('🛒','List is empty','Add items to your shopping list')}</div>
+      </div>
+    </div>
+  `;
+}
+function afterRenderDashboard() {
+  const monthPrefix = todayISO().slice(0, 7);
+  const byCat = {};
+  state.expenses.filter(e => e.date.slice(0,7) === monthPrefix).forEach(e => { byCat[e.category] = (byCat[e.category] || 0) + Number(e.amount || 0); });
+  const labels = Object.keys(byCat);
+  const canvas = document.getElementById('dash-pie');
+  if (labels.length && canvas) {
+    chartRefs.dashPie = new Chart(canvas, {
+      type: 'doughnut',
+      data: { labels, datasets: [{ data: labels.map(l => byCat[l]), backgroundColor: labels.map(l => catColor(EXPENSE_CATEGORIES, l)), borderWidth: 0 }] },
+      options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, font: { size: 10 } } } }, maintainAspectRatio: false }
+    });
+  } else if (canvas) {
+    canvas.parentElement.innerHTML = emptyState('💰','No spending yet this month','Add an expense to see the breakdown');
+  }
+}
+
+/* ============================== PROFILE & SETTINGS ============================== */
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstallPrompt = e; });
+
+function renderProfilePage() {
+  const p = state.settings.profile;
+  const sec = state.settings.security;
+  const notif = state.settings.notifications;
+  const bioSupported = !!window.PublicKeyCredential;
+  return `
+    <div class="page-header"><div><h2>Profile & Settings</h2><div class="sub">Manage your account, security, and data</div></div></div>
+
+    <div class="card" style="display:flex; align-items:center; gap:16px; margin-bottom:16px;">
+      <div class="avatar-lg ${p.avatarType==='emoji'?'emoji-mode':''}" id="profile-avatar-lg" style="cursor:pointer;">${avatarDisplay()}</div>
+      <div style="flex:1; min-width:0;">
+        <div style="font-weight:800; font-size:16px;">${esc(p.name) || 'Your name'}</div>
+        <div style="color:var(--muted); font-size:13px;">${esc(p.email) || 'No email set'}</div>
+      </div>
+      <button class="btn btn-secondary btn-sm" id="edit-profile-btn">Edit</button>
+    </div>
+
+    <div class="section-title">App lock</div>
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; ${sec.enabled ? 'margin-bottom:12px;' : ''}">
+        <div>
+          <div style="font-weight:700; font-size:14px;">PIN lock</div>
+          <div class="stat-sub">${sec.enabled ? 'A 4-digit PIN protects the app when it opens' : 'Add a PIN so DailyLife asks before it opens'}</div>
+        </div>
+        <button class="btn ${sec.enabled?'btn-secondary':'btn-primary'} btn-sm" id="toggle-lock-btn">${sec.enabled?'Turn off':'Set up'}</button>
+      </div>
+      ${sec.enabled ? `
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-sm" id="change-pin-btn">Change PIN</button>
+        ${bioSupported ? `<button class="btn btn-secondary btn-sm" id="toggle-bio-btn">${sec.biometricEnabled?'Disable':'Enable'} fingerprint / Face ID</button>` : ''}
+      </div>` : ''}
+    </div>
+
+    <div class="section-title">Notifications</div>
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; ${notif.enabled ? 'margin-bottom:12px;' : ''}">
+        <div>
+          <div style="font-weight:700; font-size:14px;">Due-date alerts</div>
+          <div class="stat-sub">Sends a notification to this device for reminders and bills that are due (checked while the app is open, and every few minutes in the background on supported devices)</div>
+        </div>
+        <button class="btn ${notif.enabled?'btn-secondary':'btn-primary'} btn-sm" id="toggle-notif-btn">${notif.enabled?'Disable':'Enable'}</button>
+      </div>
+      ${notif.enabled ? `<button class="btn btn-secondary btn-sm" id="test-notif-btn">📲 Send test notification</button>` : ''}
+    </div>
+
+    <div class="section-title">Your data</div>
+    <div class="card" style="margin-bottom:16px;">
+      <div class="stat-sub" style="margin-bottom:12px;">Everything lives in this browser's local storage. Export a backup regularly, or move your data to another device.</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-sm" id="export-btn">⬇ Export backup</button>
+        <button class="btn btn-secondary btn-sm" id="import-btn">⬆ Import backup</button>
+        <input type="file" id="import-file" accept="application/json" style="display:none;">
+      </div>
+    </div>
+
+    <div class="section-title">Install app</div>
+    <div class="card" style="margin-bottom:16px;">
+      <div class="stat-sub" style="margin-bottom:10px;">Add DailyLife to your home screen so it opens like a native app, with working notifications. Host <code>dailylife.html</code> and <code>sw.js</code> together over HTTPS (opening the file directly won't support this). On Android/Chrome, tap Install below. On iPhone, use the Share button → Add to Home Screen.</div>
+      <button class="btn btn-primary btn-sm" id="install-btn" style="display:none;">📲 Install app</button>
+    </div>
+
+    <div class="section-title">Appearance</div>
+    <div class="card" style="display:flex; align-items:center; justify-content:space-between;">
+      <div style="font-weight:700; font-size:14px;">Dark mode</div>
+      <span class="switch" id="profile-theme-switch" style="cursor:pointer;"></span>
+    </div>
+  `;
+}
+function afterRenderProfile() {
+  document.getElementById('edit-profile-btn').addEventListener('click', openProfileEditModal);
+  document.getElementById('profile-avatar-lg').addEventListener('click', openEmojiPickerModal);
+  document.getElementById('toggle-lock-btn').addEventListener('click', () => {
+    openPinSetupModal(state.settings.security.enabled ? 'disable' : 'enable');
+  });
+  const changePinBtn = document.getElementById('change-pin-btn');
+  if (changePinBtn) changePinBtn.addEventListener('click', () => openPinSetupModal('change'));
+  const toggleBioBtn = document.getElementById('toggle-bio-btn');
+  if (toggleBioBtn) toggleBioBtn.addEventListener('click', async () => {
+    if (state.settings.security.biometricEnabled) {
+      state.settings.security.biometricEnabled = false;
+      state.settings.security.credentialId = null;
+      persist('settings'); showToast('Biometric unlock disabled'); render();
+    } else {
+      const ok = await registerBiometric();
+      if (ok) { showToast('Biometric unlock enabled'); render(); }
+    }
+  });
+  document.getElementById('toggle-notif-btn').addEventListener('click', () => {
+    state.settings.notifications.enabled ? disableNotifications() : enableNotifications();
+  });
+  const testNotifBtn = document.getElementById('test-notif-btn');
+  if (testNotifBtn) testNotifBtn.addEventListener('click', sendTestNotification);
+  document.getElementById('export-btn').addEventListener('click', exportData);
+  document.getElementById('import-btn').addEventListener('click', () => document.getElementById('import-file').click());
+  document.getElementById('import-file').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (file) confirmDialog('Import backup?', 'This replaces your current data with the contents of the backup file. This cannot be undone.', () => importData(file), 'Import');
+    e.target.value = '';
+  });
+  const themeSwitch = document.getElementById('profile-theme-switch');
+  if (state.settings.theme === 'dark') themeSwitch.style.setProperty('background', 'var(--primary)');
+  themeSwitch.addEventListener('click', toggleTheme);
+  const installBtn = document.getElementById('install-btn');
+  if (deferredInstallPrompt) {
+    installBtn.style.display = 'inline-flex';
+    installBtn.addEventListener('click', async () => {
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      installBtn.style.display = 'none';
+    });
+  }
+}
+function openProfileEditModal() {
+  const p = state.settings.profile;
+  openModal(`
+    <div class="modal-head"><h3>Edit profile</h3><button class="btn-icon" id="modal-close">✕</button></div>
+    <div style="display:flex; justify-content:center; margin-bottom:16px;">
+      <div class="avatar-lg ${p.avatarType==='emoji'?'emoji-mode':''}" id="edit-avatar-preview" style="cursor:pointer;">${avatarDisplay()}</div>
+    </div>
+    <button class="btn btn-secondary btn-sm" id="change-avatar-btn" style="width:100%; margin-bottom:16px;">Change avatar</button>
+    <div class="field"><label>Name</label><input id="f-name" value="${esc(p.name)}" placeholder="Your name"></div>
+    <div class="field"><label>Email (optional)</label><input id="f-email" type="email" value="${esc(p.email)}" placeholder="you@example.com"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+      <button class="btn btn-primary" id="modal-save">Save</button>
+    </div>
+  `);
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('modal-cancel').addEventListener('click', closeModal);
+  document.getElementById('change-avatar-btn').addEventListener('click', openEmojiPickerModal);
+  document.getElementById('edit-avatar-preview').addEventListener('click', openEmojiPickerModal);
+  document.getElementById('modal-save').addEventListener('click', () => {
+    state.settings.profile.name = document.getElementById('f-name').value.trim();
+    state.settings.profile.email = document.getElementById('f-email').value.trim();
+    persist('settings'); closeModal(); showToast('Profile updated'); render();
+  });
+}
+const AVATAR_EMOJIS = ['😀','😎','🤓','🥳','😇','🤩','🦄','🐱','🐶','🐼','🦊','🐸','🌻','🌟','🔥','🌈','🍀','⚡','🎯','🎨','📚','💪','🧘','☕'];
+function openEmojiPickerModal() {
+  const p = state.settings.profile;
+  openModal(`
+    <div class="modal-head"><h3>Choose an avatar</h3><button class="btn-icon" id="modal-close">✕</button></div>
+    <div class="emoji-grid">
+      ${AVATAR_EMOJIS.map(e => `<button type="button" class="emoji-opt ${p.avatarType==='emoji' && p.avatar===e ? 'selected':''}" data-emoji="${e}">${e}</button>`).join('')}
+    </div>
+    <button class="btn btn-secondary" style="width:100%; margin-top:16px;" id="use-initials-btn">Use initials instead</button>
+  `);
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.querySelectorAll('.emoji-opt').forEach(btn => btn.addEventListener('click', () => {
+    state.settings.profile.avatar = btn.dataset.emoji;
+    state.settings.profile.avatarType = 'emoji';
+    persist('settings'); closeModal(); showToast('Avatar updated'); render();
+  }));
+  document.getElementById('use-initials-btn').addEventListener('click', () => {
+    state.settings.profile.avatarType = 'initials';
+    persist('settings'); closeModal(); showToast('Using initials as your avatar'); render();
+  });
+}
+function openPinSetupModal(mode) {
+  const needsCurrent = mode !== 'enable';
+  openModal(`
+    <div class="modal-head"><h3>${mode==='enable'?'Set up app lock':mode==='change'?'Change PIN':'Turn off app lock'}</h3><button class="btn-icon" id="modal-close">✕</button></div>
+    ${needsCurrent ? `<div class="field"><label>Current PIN</label><input id="f-current-pin" type="password" inputmode="numeric" maxlength="4" placeholder="••••"></div>` : ''}
+    ${mode !== 'disable' ? `
+    <div class="field"><label>New 4-digit PIN</label><input id="f-new-pin" type="password" inputmode="numeric" maxlength="4" placeholder="••••"></div>
+    <div class="field"><label>Confirm PIN</label><input id="f-confirm-pin" type="password" inputmode="numeric" maxlength="4" placeholder="••••"></div>
+    ` : `<p style="color:var(--muted); font-size:13px; line-height:1.5;">This removes your PIN and turns off app lock. Anyone with access to this browser will be able to open DailyLife.</p>`}
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+      <button class="btn ${mode==='disable'?'btn-danger':'btn-primary'}" id="modal-save">${mode==='enable'?'Enable lock':mode==='change'?'Update PIN':'Turn off'}</button>
+    </div>
+  `);
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('modal-cancel').addEventListener('click', closeModal);
+  document.getElementById('modal-save').addEventListener('click', async () => {
+    if (needsCurrent) {
+      const cur = document.getElementById('f-current-pin').value;
+      const hash = await hashPin(cur, state.settings.security.salt);
+      if (hash !== state.settings.security.passwordHash) { showToast('Current PIN is incorrect', 'error'); return; }
+    }
+    if (mode === 'disable') {
+      state.settings.security = { enabled: false, passwordHash: null, salt: null, biometricEnabled: false, credentialId: null };
+      persist('settings'); closeModal(); showToast('App lock turned off'); render();
+      return;
+    }
+    const np = document.getElementById('f-new-pin').value;
+    const cp = document.getElementById('f-confirm-pin').value;
+    if (!/^\d{4}$/.test(np)) { showToast('PIN must be exactly 4 digits', 'error'); return; }
+    if (np !== cp) { showToast('PINs do not match', 'error'); return; }
+    const salt = bufToBase64(crypto.getRandomValues(new Uint8Array(16)).buffer);
+    const hash = await hashPin(np, salt);
+    state.settings.security.enabled = true;
+    state.settings.security.salt = salt;
+    state.settings.security.passwordHash = hash;
+    persist('settings'); closeModal(); showToast(mode === 'enable' ? 'App lock enabled' : 'PIN updated'); render();
+  });
+}
+
+/* ---- init ---- */
+if (state.settings.security.enabled) { showLockScreen(); } else { applyTheme(); render(); checkDueNotifications(); }
+
+</script>
+</body>
+</html>
