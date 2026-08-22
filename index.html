@@ -9,8 +9,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="DailyLife">
-<link id="manifest-link" rel="manifest" href="">
-<link rel="apple-touch-icon" id="apple-touch-icon" href="">
+<link id="manifest-link" rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" id="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -354,6 +354,22 @@ a{color:inherit;}
 .emoji-opt.selected{border-color:var(--primary); background:var(--primary-light);}
 .profile-avatar-btn.emoji-mode{background:var(--surface-2);}
 .avatar-lg.emoji-mode{background:var(--surface-2);}
+
+/* Install banner: shown as a normal-flow element at the top of <body>, not position:fixed,
+   so it pushes the sidebar/topbar/content down instead of overlapping anything. */
+.install-banner{
+  display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--surface);
+  border-bottom:1px solid var(--border); box-shadow:var(--shadow); position:relative; z-index:20;
+  animation:fadeIn .2s ease;
+}
+.install-banner-icon{
+  width:34px; height:34px; border-radius:9px; background:var(--primary); color:var(--primary-ink);
+  display:flex; align-items:center; justify-content:center; font-weight:800; font-family:var(--font-display);
+  font-size:13px; flex-shrink:0;
+}
+.install-banner-text{flex:1; min-width:0;}
+.install-banner-title{font-weight:800; font-size:13.5px;}
+.install-banner-sub{font-size:11.5px; color:var(--muted);}
 .lock-error{color:var(--danger); font-size:12.5px; font-weight:600; height:16px; margin-bottom:6px;}
 .lock-bio{margin-top:6px;}
 </style>
@@ -420,6 +436,11 @@ a{color:inherit;}
    All persistence goes through saveToStorage / loadFromStorage / updateStorage / deleteFromStorage.
 ================================================================================ */
 
+/* Bump this on every edit/release. Shown at the bottom of Profile & Settings so
+   it's easy to confirm which build is actually running (e.g. after a deploy or
+   a browser cache refresh). */
+const APP_VERSION = '1.11.0';
+
 /* ---------- Storage keys ---------- */
 const STORAGE_KEYS = {
   tasks: 'dailylife_tasks',
@@ -428,6 +449,7 @@ const STORAGE_KEYS = {
   income: 'dailylife_income',
   shopping: 'dailylife_shopping',
   reminders: 'dailylife_reminders',
+  links: 'dailylife_links',
   notes: 'dailylife_notes',
   bills: 'dailylife_bills',
   documents: 'dailylife_documents',
@@ -471,6 +493,15 @@ function toLocalDateStr(d) {
 }
 function todayISO() { return toLocalDateStr(new Date()); }
 
+/* ---------- UI state (last viewed route + scroll position), so a reload returns you to where you were ---------- */
+const UI_STATE_KEY = 'dailylife_ui_state';
+function loadUIState() {
+  try { return JSON.parse(localStorage.getItem(UI_STATE_KEY) || 'null'); } catch (e) { return null; }
+}
+function saveUIState() {
+  try { localStorage.setItem(UI_STATE_KEY, JSON.stringify({ route: currentRoute, scrollY: window.scrollY || 0 })); } catch (e) { /* ignore */ }
+}
+
 /* ---------- Default settings (merged with anything already saved) ---------- */
 const DEFAULT_SETTINGS = {
   theme: 'light',
@@ -496,6 +527,7 @@ const state = {
   income: loadFromStorage(STORAGE_KEYS.income, []),
   shopping: loadFromStorage(STORAGE_KEYS.shopping, []),
   reminders: loadFromStorage(STORAGE_KEYS.reminders, []),
+  links: loadFromStorage(STORAGE_KEYS.links, []),
   notes: loadFromStorage(STORAGE_KEYS.notes, []),
   bills: loadFromStorage(STORAGE_KEYS.bills, []),
   documents: loadFromStorage(STORAGE_KEYS.documents, []),
@@ -551,16 +583,27 @@ const ROUTES = [
   { id: 'expenses', label: 'Finance', icon: '💰' },
   { id: 'shopping', label: 'Shopping', icon: '🛒' },
   { id: 'reminders', label: 'Reminders', icon: '🔔' },
+  { id: 'links', label: 'Links', icon: '🔗' },
   { id: 'notes', label: 'Notes', icon: '📝' },
   { id: 'bills', label: 'Bills', icon: '💳' },
   { id: 'documents', label: 'Documents', icon: '📄' },
   { id: 'profile', label: 'Profile', icon: '👤' },
 ];
 // Routes that have a natural "add new item" action for the center FAB
-const FAB_ROUTES = { tasks: 1, planner: 1, expenses: 1, shopping: 1, reminders: 1, notes: 1, bills: 1, documents: 1 };
+const FAB_ROUTES = { tasks: 1, planner: 1, expenses: 1, shopping: 1, reminders: 1, links: 1, notes: 1, bills: 1, documents: 1 };
 
 let currentRoute = (location.hash || '#/dashboard').replace('#/', '');
 if (!ROUTES.some(r => r.id === currentRoute)) currentRoute = 'dashboard';
+
+/* Programmatic navigation uses replaceState (not location.hash = ...) so switching tabs never
+   adds browser-history entries. Otherwise the phone's physical back button would step back
+   through every previously visited section instead of doing something sensible. */
+function navigateTo(routeId) {
+  if (!ROUTES.some(r => r.id === routeId)) routeId = 'dashboard';
+  currentRoute = routeId;
+  try { history.replaceState(null, '', '#/' + routeId); } catch (e) { /* ignore */ }
+  render();
+}
 
 /* ---------- Page-local UI state ---------- */
 let taskFilter = 'all';
@@ -591,14 +634,14 @@ function renderNav() {
       <span class="ic">${r.icon}</span><span>${r.label}</span>
     </li>`).join('');
   navList.querySelectorAll('.nav-item').forEach(el => {
-    el.addEventListener('click', () => { location.hash = '#/' + el.dataset.route; closeSidebar(); });
+    el.addEventListener('click', () => { navigateTo(el.dataset.route); closeSidebar(); });
   });
 
   const bnItem = r => `<div class="bn-item ${r.id === currentRoute ? 'active' : ''}" data-route="${r.id}"><span class="ic">${r.icon}</span><span>${r.label}</span></div>`;
   const bottomList = document.getElementById('bottom-nav-list');
   bottomList.innerHTML = ROUTES.map(bnItem).join('');
   bottomList.querySelectorAll('.bn-item').forEach(el => {
-    el.addEventListener('click', () => { location.hash = '#/' + el.dataset.route; });
+    el.addEventListener('click', () => { navigateTo(el.dataset.route); });
   });
   const activeBn = bottomList.querySelector('.bn-item.active');
   if (activeBn && typeof activeBn.scrollIntoView === 'function') {
@@ -637,8 +680,8 @@ document.getElementById('hamburger-btn').addEventListener('click', () => {
 document.getElementById('scrim').addEventListener('click', closeSidebar);
 document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
 document.getElementById('theme-toggle-mobile').addEventListener('click', toggleTheme);
-document.getElementById('profile-btn-mobile').addEventListener('click', () => { location.hash = '#/profile'; closeSidebar(); });
-document.getElementById('profile-btn-desktop').addEventListener('click', () => { location.hash = '#/profile'; });
+document.getElementById('profile-btn-mobile').addEventListener('click', () => { navigateTo('profile'); closeSidebar(); });
+document.getElementById('profile-btn-desktop').addEventListener('click', () => { navigateTo('profile'); });
 
 /* ---------- Center "Add" button: routes to the right modal for the current page ---------- */
 function centralAddHandler() {
@@ -649,6 +692,7 @@ function centralAddHandler() {
     case 'expenses': openTransactionModal(financeTab === 'income' ? 'income' : 'expense'); break;
     case 'shopping': openShopModal(); break;
     case 'reminders': openReminderModal(); break;
+    case 'links': openLinkModal(); break;
     case 'notes': openNoteModal(); break;
     case 'bills': openBillModal(); break;
     case 'documents': openDocModal(); break;
@@ -813,8 +857,8 @@ function unlockApp() {
   appUnlocked = true;
   pinBuffer = '';
   document.getElementById('lock-screen').classList.remove('show');
-  render();
-  checkDueNotifications();
+  armBackGuard();
+  bootApp();
 }
 function showLockScreen() {
   pinBuffer = '';
@@ -836,6 +880,43 @@ async function attemptBiometricUnlock() {
     document.getElementById('lock-error').textContent = 'Biometric unlock failed — use your PIN';
   }
 }
+
+/* ===================== Back button: lock instead of navigating tab history, then exit on the next press =====================
+   Tab switches never touch browser history (see navigateTo), so without this, pressing the phone's
+   physical back button would just leave the app immediately. Instead: while the app is unlocked, the
+   first back press locks it (and re-arms this guard); if the app is already locked, the next back press
+   is left alone and falls through to the browser's normal behavior, which closes/exits the app. */
+let backGuardArmed = false;
+function armBackGuard() {
+  try { history.pushState({ dlGuard: true }, ''); backGuardArmed = true; } catch (e) { /* ignore */ }
+}
+function lockAppNow() {
+  if (!state.settings.security.enabled || !appUnlocked) return;
+  appUnlocked = false;
+  pinBuffer = '';
+  saveUIState();
+  showLockScreen();
+}
+window.addEventListener('popstate', () => {
+  if (state.settings.security.enabled && appUnlocked) {
+    lockAppNow();
+    // Intentionally not re-armed here — the very next back press should exit the app, not lock it again.
+  }
+  // If already locked (or lock isn't enabled), do nothing: let the browser's default back action proceed.
+});
+
+/* ===================== Auto-lock after a period of inactivity ===================== */
+const AUTO_LOCK_MS = 60 * 1000;
+let lastActivityAt = Date.now();
+function markActivity() { lastActivityAt = Date.now(); }
+['click', 'keydown', 'touchstart', 'mousemove', 'scroll', 'wheel'].forEach(evt => {
+  document.addEventListener(evt, markActivity, { passive: true });
+});
+setInterval(() => {
+  if (state.settings.security.enabled && appUnlocked && Date.now() - lastActivityAt >= AUTO_LOCK_MS) {
+    lockAppNow();
+  }
+}, 5000);
 function bufToBase64(buf) { return btoa(String.fromCharCode(...new Uint8Array(buf))); }
 function utf8ToBase64(str) { return btoa(unescape(encodeURIComponent(str))); }
 function base64ToBuf(b64) { return Uint8Array.from(atob(b64), c => c.charCodeAt(0)).buffer; }
@@ -868,7 +949,7 @@ async function registerBiometric() {
 let swRegistration = null;
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return Promise.resolve(null);
-  return navigator.serviceWorker.register('./sw.js', { scope: './' })
+  return navigator.serviceWorker.register('./sw.js')
     .then(reg => { swRegistration = reg; return reg; })
     .catch(() => { swRegistration = null; return null; }); // e.g. opened via file:// — silently degrade to desktop-only notifications
 }
@@ -983,8 +1064,15 @@ function destroyCharts() {
   chartRefs = {};
 }
 
+let lastRenderedRoute = null;
 function render() {
   if (state.settings.security.enabled && !appUnlocked) { showLockScreen(); return; }
+  // Capture scroll position before touching the DOM. Re-rendering happens for lots of reasons that
+  // AREN'T "the user navigated to a new page" — ticking a checkbox, switching a filter tab (e.g.
+  // Pending/Completed), saving an edit, etc. Only an actual route change should jump to the top;
+  // everything else should leave the user right where they were scrolled to.
+  const preservedScrollY = window.scrollY || 0;
+  const routeChanged = currentRoute !== lastRenderedRoute;
   applyTheme();
   renderNav();
   destroyCharts();
@@ -996,18 +1084,51 @@ function render() {
     case 'expenses': el.innerHTML = renderFinancePage(); afterRenderFinance(); break;
     case 'shopping': el.innerHTML = renderShoppingPage(); afterRenderShopping(); break;
     case 'reminders': el.innerHTML = renderRemindersPage(); afterRenderReminders(); break;
+    case 'links': el.innerHTML = renderLinksPage(); afterRenderLinks(); break;
     case 'notes': el.innerHTML = renderNotesPage(); afterRenderNotes(); break;
     case 'bills': el.innerHTML = renderBillsPage(); afterRenderBills(); break;
     case 'documents': el.innerHTML = renderDocumentsPage(); afterRenderDocuments(); break;
     case 'profile': el.innerHTML = renderProfilePage(); afterRenderProfile(); break;
     default: el.innerHTML = '';
   }
-  window.scrollTo(0, 0);
+  if (skipNextScrollReset) { skipNextScrollReset = false; }
+  else if (routeChanged) { window.scrollTo(0, 0); }
+  else { window.scrollTo(0, preservedScrollY); }
+  lastRenderedRoute = currentRoute;
+  saveUIState();
 }
 
-/* ---------- PWA manifest ---------- */
-document.getElementById('manifest-link').setAttribute('href', './manifest.json');
-document.getElementById('apple-touch-icon').setAttribute('href', './icons/icon-192.png');
+/* Boot (or re-boot after unlocking): restores the last-viewed section and scroll position instead of
+   always landing on the Dashboard at the top of the page. */
+let skipNextScrollReset = false;
+function bootApp() {
+  const saved = loadUIState();
+  let restoreScrollY = null;
+  if (saved && ROUTES.some(r => r.id === saved.route)) {
+    currentRoute = saved.route;
+    try { history.replaceState(null, '', '#/' + currentRoute); } catch (e) { /* ignore */ }
+    restoreScrollY = saved.scrollY;
+  }
+  skipNextScrollReset = true;
+  render();
+  if (typeof restoreScrollY === 'number' && restoreScrollY > 0) {
+    requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, restoreScrollY)));
+  }
+  checkDueNotifications();
+  setTimeout(showInstallBanner, 2000);
+}
+let scrollSaveTimer = null;
+window.addEventListener('scroll', () => {
+  clearTimeout(scrollSaveTimer);
+  scrollSaveTimer = setTimeout(saveUIState, 200);
+}, { passive: true });
+document.addEventListener('visibilitychange', () => { if (document.hidden) saveUIState(); });
+
+/* Manifest and icons are now real static files (manifest.json, icon-*.png, apple-touch-icon.png)
+   linked directly in index.html's <head>, not injected at runtime. A manifest swapped in via
+   JavaScript after page load (or a data: URI manifest) is unreliable for Chrome's installability
+   checks — it commonly results in "Add to Home Screen" creating a plain browser shortcut instead
+   of a real installable PWA, which is exactly the bug this replaced. */
 
 /* ============================== TASKS ============================== */
 function renderTasksPage() {
@@ -1027,7 +1148,7 @@ function renderTasksPage() {
       <div class="card"><div class="card-title">Completion</div><div class="chart-wrap" style="height:150px;"><canvas id="task-doughnut"></canvas></div></div>
       <div class="card"><div class="card-title">By priority</div><div class="chart-wrap" style="height:150px;"><canvas id="task-bar"></canvas></div></div>
     </div>` : ''}
-    <div class="searchbar"><span class="ic">🔍</span><input id="task-search" placeholder="Search tasks..." value="${esc(taskSearch)}"></div>
+    <div class="searchbar"><span class="ic">🔍</span><input id="task-search" autocomplete="off" placeholder="Search tasks..." value="${esc(taskSearch)}"></div>
     <div class="tabs">
       ${['all','pending','completed'].map(f => `<div class="tab ${taskFilter===f?'active':''}" data-filter="${f}">${f[0].toUpperCase()+f.slice(1)}</div>`).join('')}
     </div>
@@ -1047,6 +1168,7 @@ function taskRow(t) {
           <span class="pill pill-${t.priority.toLowerCase()}">${t.priority}</span>
           ${t.dueDate ? `<span style="color:${overdue?'var(--danger)':'var(--muted)'}">${overdue?'Overdue · ':''}${fmtDate(t.dueDate)}</span>` : ''}
         </div>
+        ${t.description ? `<div class="row-meta">${esc(t.description)}</div>` : ''}
       </div>
       <div class="row-actions">
         <button class="btn-icon" data-action="edit">✎</button>
@@ -1110,8 +1232,9 @@ function openTaskModal(task) {
   const editing = !!task;
   openModal(`
     <div class="modal-head"><h3>${editing ? 'Edit task' : 'Add task'}</h3><button class="btn-icon" id="modal-close">✕</button></div>
-    <div class="field"><label>Title</label><input id="f-title" value="${esc(task?.title||'')}" placeholder="e.g. Finish report"></div>
-    <div class="field"><label>Due date</label><input id="f-due" type="date" value="${task?.dueDate||''}"></div>
+    <div class="field"><label>Title</label><input id="f-title" autocomplete="off" value="${esc(task?.title||'')}" placeholder="e.g. Finish report"></div>
+    <div class="field"><label>Description (optional)</label><textarea id="f-desc" autocomplete="off" placeholder="Add any extra detail">${esc(task?.description||'')}</textarea></div>
+    <div class="field"><label>Due date</label><input id="f-due" autocomplete="off" type="date" value="${task?.dueDate||''}"></div>
     <div class="field"><label>Priority</label>
       <select id="f-priority">${['Low','Medium','High'].map(p=>`<option ${task?.priority===p?'selected':''}>${p}</option>`).join('')}</select>
     </div>
@@ -1125,7 +1248,7 @@ function openTaskModal(task) {
   document.getElementById('modal-save').addEventListener('click', () => {
     const title = document.getElementById('f-title').value.trim();
     if (!title) { showToast('Please enter a task title', 'error'); return; }
-    const data = { title, dueDate: document.getElementById('f-due').value, priority: document.getElementById('f-priority').value };
+    const data = { title, description: document.getElementById('f-desc').value.trim(), dueDate: document.getElementById('f-due').value, priority: document.getElementById('f-priority').value };
     if (editing) { Object.assign(task, data); showToast('Task updated'); }
     else { state.tasks.push({ id: uid(), completed: false, ...data }); showToast('Task added'); }
     persist('tasks'); closeModal(); render();
@@ -1185,6 +1308,7 @@ function plannerRow(p) {
       <div class="row-main">
         <div class="row-title ${p.completed?'done':''}">${esc(p.activity)}</div>
         ${p.time ? `<div class="row-meta"><span>${esc(p.time)}</span></div>` : ''}
+        ${p.description ? `<div class="row-meta">${esc(p.description)}</div>` : ''}
       </div>
       <div class="row-actions">
         <button class="btn-icon" data-action="edit">✎</button>
@@ -1216,13 +1340,14 @@ function openPlannerModal(item) {
   const isPreset = editing ? PLANNER_SLOTS.includes(item.slot) : true;
   openModal(`
     <div class="modal-head"><h3>${editing ? 'Edit activity' : 'Add activity'}</h3><button class="btn-icon" id="modal-close">✕</button></div>
-    <div class="field"><label>Activity</label><input id="f-activity" value="${esc(item?.activity||'')}" placeholder="e.g. Team standup"></div>
-    <div class="field"><label>Date</label><input id="f-date" type="date" value="${item?.date||plannerDate}"></div>
+    <div class="field"><label>Activity</label><input id="f-activity" autocomplete="off" value="${esc(item?.activity||'')}" placeholder="e.g. Team standup"></div>
+    <div class="field"><label>Description (optional)</label><textarea id="f-desc" autocomplete="off" placeholder="Add any extra detail">${esc(item?.description||'')}</textarea></div>
+    <div class="field"><label>Date</label><input id="f-date" autocomplete="off" type="date" value="${item?.date||plannerDate}"></div>
     <div class="field"><label>Time slot</label>
       <select id="f-slot">${PLANNER_SLOTS.map(s=>`<option ${item?.slot===s?'selected':''}>${s}</option>`).join('')}<option value="__custom" ${!isPreset?'selected':''}>Custom...</option></select>
     </div>
-    <div class="field" id="custom-slot-wrap" style="display:${!isPreset?'block':'none'}"><label>Custom slot name</label><input id="f-custom-slot" value="${!isPreset?esc(item.slot):''}" placeholder="e.g. Late night"></div>
-    <div class="field"><label>Time (optional)</label><input id="f-time" type="time" value="${item?.time||''}"></div>
+    <div class="field" id="custom-slot-wrap" style="display:${!isPreset?'block':'none'}"><label>Custom slot name</label><input id="f-custom-slot" autocomplete="off" value="${!isPreset?esc(item.slot):''}" placeholder="e.g. Late night"></div>
+    <div class="field"><label>Time (optional)</label><input id="f-time" autocomplete="off" type="time" value="${item?.time||''}"></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
       <button class="btn btn-primary" id="modal-save">${editing?'Save changes':'Add activity'}</button>
@@ -1238,7 +1363,7 @@ function openPlannerModal(item) {
     if (!activity) { showToast('Please enter an activity', 'error'); return; }
     let slot = document.getElementById('f-slot').value;
     if (slot === '__custom') slot = document.getElementById('f-custom-slot').value.trim() || 'Custom';
-    const data = { activity, slot, time: document.getElementById('f-time').value, date: document.getElementById('f-date').value || plannerDate };
+    const data = { activity, description: document.getElementById('f-desc').value.trim(), slot, time: document.getElementById('f-time').value, date: document.getElementById('f-date').value || plannerDate };
     if (editing) { Object.assign(item, data); showToast('Activity updated'); }
     else { state.planner.push({ id: uid(), completed: false, ...data }); showToast('Activity added'); }
     persist('planner'); closeModal(); render();
@@ -1265,10 +1390,12 @@ function renderFinancePage() {
     <div class="page-header">
       <div><h2>Finance</h2><div class="sub">Track spending and income together</div></div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="btn btn-secondary btn-sm" id="finance-report-csv-btn">⬇ CSV</button>
-        <button class="btn btn-secondary btn-sm" id="finance-report-pdf-btn">⬇ PDF</button>
+        <button class="btn btn-secondary btn-sm" id="finance-total-btn">Σ Total</button>
+        <button class="btn btn-secondary btn-sm" id="finance-report-csv-btn">⬇ Monthly CSV</button>
+        <button class="btn btn-secondary btn-sm" id="finance-report-pdf-btn">⬇ Monthly PDF</button>
       </div>
     </div>
+    <div class="section-title" style="margin-top:0;">This month</div>
     <div class="grid grid-3" style="margin-bottom:16px;">
       <div class="card"><div class="card-title">Monthly income</div><div class="stat-value" style="color:var(--primary)">${fmtMoney(monthIncome)}</div></div>
       <div class="card"><div class="card-title">Monthly expenses</div><div class="stat-value" style="color:var(--danger)">${fmtMoney(monthExpense)}</div></div>
@@ -1301,7 +1428,11 @@ function financeRow(e, cats) {
       <span class="chip-dot" style="background:${catColor(cats, e.category)}"></span>
       <div class="row-main">
         <div class="row-title">${esc(e.description || e.category)}</div>
-        <div class="row-meta"><span class="pill" style="background:${catColor(cats,e.category)}22; color:${catColor(cats,e.category)}">${e.category}</span><span>${fmtDate(e.date)}</span></div>
+        <div class="row-meta">
+          <span class="pill" style="background:${catColor(cats,e.category)}22; color:${catColor(cats,e.category)}">${e.category}</span>
+          ${e.paymentMethod ? `<span class="pill" style="background:var(--surface-2); color:var(--muted);">${e.paymentMethod === 'UPI' ? '📱' : '💵'} ${e.paymentMethod}</span>` : ''}
+          <span>${fmtDate(e.date)}</span>
+        </div>
       </div>
       <div style="font-weight:800;">${fmtMoney(e.amount)}</div>
       <div class="row-actions">
@@ -1312,8 +1443,9 @@ function financeRow(e, cats) {
 }
 function afterRenderFinance() {
   document.querySelectorAll('[data-tab]').forEach(el => el.addEventListener('click', () => { financeTab = el.dataset.tab; render(); }));
-  document.getElementById('finance-report-csv-btn').addEventListener('click', downloadFinanceReport);
-  document.getElementById('finance-report-pdf-btn').addEventListener('click', downloadFinanceReportPDF);
+  document.getElementById('finance-total-btn').addEventListener('click', openFinanceTotalModal);
+  document.getElementById('finance-report-csv-btn').addEventListener('click', downloadFinanceMonthlyReport);
+  document.getElementById('finance-report-pdf-btn').addEventListener('click', downloadFinanceMonthlyReportPDF);
   const list = financeTab === 'income' ? state.income : state.expenses;
   document.querySelectorAll('#finance-list .row').forEach(row => {
     const id = row.dataset.id;
@@ -1355,27 +1487,83 @@ function afterRenderFinance() {
     options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 8, font: { size: 10 } } } }, scales: { y: { beginAtZero: true, ticks: { font: { size: 9 } } }, x: { ticks: { font: { size: 9 } } } }, maintainAspectRatio: false }
   });
 }
-function downloadFinanceReport() {
-  const rows = [['Type','Date','Category','Description','Amount']];
-  state.income.forEach(e => rows.push(['Income', e.date, e.category, e.description || '', e.amount]));
-  state.expenses.forEach(e => rows.push(['Expense', e.date, e.category, e.description || '', e.amount]));
-  downloadBlob(`finance-report-${todayISO()}.csv`, toCSV(rows), 'text/csv');
-  showToast('Report downloaded');
+function downloadFinanceMonthlyReport() {
+  const monthStart = todayISO().slice(0, 7) + '-01';
+  const rows = [['Type','Date','Category','Payment Method','Description','Amount']];
+  state.income.filter(e => e.date >= monthStart).forEach(e => rows.push(['Income', e.date, e.category, e.paymentMethod || '', e.description || '', e.amount]));
+  state.expenses.filter(e => e.date >= monthStart).forEach(e => rows.push(['Expense', e.date, e.category, e.paymentMethod || '', e.description || '', e.amount]));
+  downloadBlob(`finance-monthly-report-${todayISO()}.csv`, toCSV(rows), 'text/csv');
+  showToast('Monthly report downloaded');
 }
-function downloadFinanceReportPDF() {
+function downloadFinanceMonthlyReportPDF() {
+  const monthStart = todayISO().slice(0, 7) + '-01';
+  const incomeThisMonth = state.income.filter(e => e.date >= monthStart);
+  const expenseThisMonth = state.expenses.filter(e => e.date >= monthStart);
+  const totalIncome = sum(incomeThisMonth);
+  const totalExpense = sum(expenseThisMonth);
+  const rows = [];
+  incomeThisMonth.forEach(e => rows.push(['Income', fmtDate(e.date), e.category, e.paymentMethod || '', e.description || '', fmtMoneyPDF(e.amount)]));
+  expenseThisMonth.forEach(e => rows.push(['Expense', fmtDate(e.date), e.category, e.paymentMethod || '', e.description || '', fmtMoneyPDF(e.amount)]));
+  rows.sort((a, b) => a[1].localeCompare(b[1]));
+  downloadPDFReport(
+    'Monthly Finance Report — DailyLife',
+    ['Type','Date','Category','Payment','Description','Amount'],
+    rows,
+    `finance-monthly-report-${todayISO()}.pdf`,
+    [
+      `Month: ${new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}`,
+      `Total income: ${fmtMoneyPDF(totalIncome)}`,
+      `Total expenses: ${fmtMoneyPDF(totalExpense)}`,
+      `Net balance: ${fmtMoneyPDF(totalIncome - totalExpense)}`,
+    ]
+  );
+}
+function downloadFinanceTotalReport() {
+  const rows = [['Type','Date','Category','Payment Method','Description','Amount']];
+  state.income.forEach(e => rows.push(['Income', e.date, e.category, e.paymentMethod || '', e.description || '', e.amount]));
+  state.expenses.forEach(e => rows.push(['Expense', e.date, e.category, e.paymentMethod || '', e.description || '', e.amount]));
+  downloadBlob(`finance-total-report-${todayISO()}.csv`, toCSV(rows), 'text/csv');
+  showToast('Total report downloaded');
+}
+function downloadFinanceTotalReportPDF() {
   const totalIncome = sum(state.income);
   const totalExpense = sum(state.expenses);
   const rows = [];
-  state.income.forEach(e => rows.push(['Income', fmtDate(e.date), e.category, e.description || '', fmtMoneyPDF(e.amount)]));
-  state.expenses.forEach(e => rows.push(['Expense', fmtDate(e.date), e.category, e.description || '', fmtMoneyPDF(e.amount)]));
+  state.income.forEach(e => rows.push(['Income', fmtDate(e.date), e.category, e.paymentMethod || '', e.description || '', fmtMoneyPDF(e.amount)]));
+  state.expenses.forEach(e => rows.push(['Expense', fmtDate(e.date), e.category, e.paymentMethod || '', e.description || '', fmtMoneyPDF(e.amount)]));
   rows.sort((a, b) => a[1].localeCompare(b[1]));
   downloadPDFReport(
-    'Finance Report — DailyLife',
-    ['Type','Date','Category','Description','Amount'],
+    'Total Finance Report — DailyLife',
+    ['Type','Date','Category','Payment','Description','Amount'],
     rows,
-    `finance-report-${todayISO()}.pdf`,
-    [`Total income: ${fmtMoneyPDF(totalIncome)}`, `Total expenses: ${fmtMoneyPDF(totalExpense)}`, `Net balance: ${fmtMoneyPDF(totalIncome - totalExpense)}`]
+    `finance-total-report-${todayISO()}.pdf`,
+    [
+      `All-time total income: ${fmtMoneyPDF(totalIncome)}`,
+      `All-time total expenses: ${fmtMoneyPDF(totalExpense)}`,
+      `Net balance: ${fmtMoneyPDF(totalIncome - totalExpense)}`,
+    ]
   );
+}
+function openFinanceTotalModal() {
+  const totalIncome = sum(state.income);
+  const totalExpense = sum(state.expenses);
+  const net = totalIncome - totalExpense;
+  openModal(`
+    <div class="modal-head"><h3>Total statistics</h3><button class="btn-icon" id="modal-close">✕</button></div>
+    <div class="grid grid-3" style="margin-bottom:14px;">
+      <div class="card"><div class="card-title">Total income</div><div class="stat-value" style="color:var(--primary); font-size:18px;">${fmtMoney(totalIncome)}</div></div>
+      <div class="card"><div class="card-title">Total expenses</div><div class="stat-value" style="color:var(--danger); font-size:18px;">${fmtMoney(totalExpense)}</div></div>
+      <div class="card"><div class="card-title">Net balance</div><div class="stat-value" style="color:${net>=0?'var(--primary)':'var(--danger)'}; font-size:18px;">${net>=0?'+':''}${fmtMoney(net)}</div></div>
+    </div>
+    <div class="stat-sub" style="margin-bottom:16px;">All time, across ${state.income.length} income and ${state.expenses.length} expense entries.</div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="total-csv-btn">⬇ CSV</button>
+      <button class="btn btn-secondary" id="total-pdf-btn">⬇ PDF</button>
+    </div>
+  `);
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('total-csv-btn').addEventListener('click', downloadFinanceTotalReport);
+  document.getElementById('total-pdf-btn').addEventListener('click', downloadFinanceTotalReportPDF);
 }
 let txModalType = 'expense';
 let txAmountBuffer = ''; // plain typed string, e.g. "1234.5" — integer digits first, decimal point after
@@ -1435,8 +1623,14 @@ function openTransactionModal(initialType, item) {
     </div>
     <div class="amount-pad" id="tx-amount-pad"></div>
     <div class="field"><label>Category</label><select id="f-category"></select></div>
-    <div class="field"><label>Description</label><input id="f-desc" value="${esc(item?.description||'')}" placeholder="e.g. Groceries"></div>
-    <div class="field"><label>Date</label><input id="f-date" type="date" value="${item?.date||todayISO()}"></div>
+    <div class="field"><label>Payment method</label>
+      <div class="tabs" id="tx-payment-toggle" style="margin-bottom:0;">
+        <div class="tab ${(!item || item.paymentMethod !== 'UPI') ? 'active' : ''}" data-payment="Cash">💵 Cash</div>
+        <div class="tab ${(item && item.paymentMethod === 'UPI') ? 'active' : ''}" data-payment="UPI">📱 UPI</div>
+      </div>
+    </div>
+    <div class="field"><label>Description</label><input id="f-desc" autocomplete="off" value="${esc(item?.description||'')}" placeholder="e.g. Groceries"></div>
+    <div class="field"><label>Date</label><input id="f-date" autocomplete="off" type="date" value="${item?.date||todayISO()}"></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
       <button class="btn btn-primary" id="modal-save">${editing?'Save changes':'Add'}</button>
@@ -1445,6 +1639,12 @@ function openTransactionModal(initialType, item) {
   buildAmountPad();
   updateAmountDisplay();
   populateCategorySelect(item);
+  document.querySelectorAll('#tx-payment-toggle .tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#tx-payment-toggle .tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
   document.querySelectorAll('#tx-type-toggle .tx-type-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       txModalType = btn.dataset.type;
@@ -1458,7 +1658,8 @@ function openTransactionModal(initialType, item) {
   document.getElementById('modal-save').addEventListener('click', () => {
     const amount = txBufferToAmount();
     if (!amount || amount <= 0) { showToast('Please enter a valid amount', 'error'); return; }
-    const data = { amount, category: document.getElementById('f-category').value, description: document.getElementById('f-desc').value.trim(), date: document.getElementById('f-date').value || todayISO() };
+    const paymentMethod = document.querySelector('#tx-payment-toggle .tab.active')?.dataset.payment || 'Cash';
+    const data = { amount, category: document.getElementById('f-category').value, paymentMethod, description: document.getElementById('f-desc').value.trim(), date: document.getElementById('f-date').value || todayISO() };
     if (editing) {
       const wasIncome = state.income.includes(item);
       const wasType = wasIncome ? 'income' : 'expense';
@@ -1509,6 +1710,7 @@ function shopRow(i) {
       <div class="row-main">
         <div class="row-title ${i.purchased?'done':''}">${esc(i.name)} ${i.quantity ? `<span style="color:var(--muted); font-weight:600;">× ${esc(i.quantity)}</span>` : ''}</div>
         <div class="row-meta"><span class="pill" style="background:${catColor(SHOPPING_CATEGORIES,i.category)}22; color:${catColor(SHOPPING_CATEGORIES,i.category)}">${i.category}</span></div>
+        ${i.description ? `<div class="row-meta">${esc(i.description)}</div>` : ''}
       </div>
       <div class="row-actions">
         <button class="btn-icon" data-action="edit">✎</button>
@@ -1549,11 +1751,12 @@ function openShopModal(item) {
   const editing = !!item;
   openModal(`
     <div class="modal-head"><h3>${editing?'Edit item':'Add item'}</h3><button class="btn-icon" id="modal-close">✕</button></div>
-    <div class="field"><label>Item name</label><input id="f-name" value="${esc(item?.name||'')}" placeholder="e.g. Milk"></div>
+    <div class="field"><label>Item name</label><input id="f-name" autocomplete="off" value="${esc(item?.name||'')}" placeholder="e.g. Milk"></div>
     <div class="field-row">
-      <div class="field"><label>Quantity</label><input id="f-qty" value="${esc(item?.quantity||'')}" placeholder="e.g. 2"></div>
+      <div class="field"><label>Quantity</label><input id="f-qty" autocomplete="off" value="${esc(item?.quantity||'')}" placeholder="e.g. 2"></div>
       <div class="field"><label>Category</label><select id="f-cat">${SHOPPING_CATEGORIES.map(c=>`<option ${item?.category===c.name?'selected':''}>${c.name}</option>`).join('')}</select></div>
     </div>
+    <div class="field"><label>Description (optional)</label><textarea id="f-desc" autocomplete="off" placeholder="Add any extra detail">${esc(item?.description||'')}</textarea></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
       <button class="btn btn-primary" id="modal-save">${editing?'Save changes':'Add item'}</button>
@@ -1564,7 +1767,7 @@ function openShopModal(item) {
   document.getElementById('modal-save').addEventListener('click', () => {
     const name = document.getElementById('f-name').value.trim();
     if (!name) { showToast('Please enter an item name', 'error'); return; }
-    const data = { name, quantity: document.getElementById('f-qty').value.trim(), category: document.getElementById('f-cat').value };
+    const data = { name, quantity: document.getElementById('f-qty').value.trim(), category: document.getElementById('f-cat').value, description: document.getElementById('f-desc').value.trim() };
     if (editing) { Object.assign(item, data); showToast('Item updated'); }
     else { state.shopping.push({ id: uid(), purchased: false, ...data }); showToast('Item added'); }
     persist('shopping'); closeModal(); render();
@@ -1625,11 +1828,11 @@ function openReminderModal(item) {
   const editing = !!item;
   openModal(`
     <div class="modal-head"><h3>${editing?'Edit reminder':'Add reminder'}</h3><button class="btn-icon" id="modal-close">✕</button></div>
-    <div class="field"><label>Title</label><input id="f-title" value="${esc(item?.title||'')}" placeholder="e.g. Call the dentist"></div>
-    <div class="field"><label>Description</label><textarea id="f-desc">${esc(item?.description||'')}</textarea></div>
+    <div class="field"><label>Title</label><input id="f-title" autocomplete="off" value="${esc(item?.title||'')}" placeholder="e.g. Call the dentist"></div>
+    <div class="field"><label>Description</label><textarea id="f-desc" autocomplete="off">${esc(item?.description||'')}</textarea></div>
     <div class="field-row">
-      <div class="field"><label>Date</label><input id="f-date" type="date" value="${item?.date||todayISO()}"></div>
-      <div class="field"><label>Time</label><input id="f-time" type="time" value="${item?.time||''}"></div>
+      <div class="field"><label>Date</label><input id="f-date" autocomplete="off" type="date" value="${item?.date||todayISO()}"></div>
+      <div class="field"><label>Time</label><input id="f-time" autocomplete="off" type="time" value="${item?.time||''}"></div>
     </div>
     <div class="field-row">
       <div class="field"><label>Repeat</label><select id="f-repeat">${REPEAT_OPTIONS.map(o=>`<option ${item?.repeat===o?'selected':''}>${o}</option>`).join('')}</select></div>
@@ -1652,6 +1855,97 @@ function openReminderModal(item) {
   });
 }
 
+/* ============================== LINKS ============================== */
+let linksSearch = '';
+function renderLinksPage() {
+  const filtered = state.links.filter(l =>
+    !linksSearch ||
+    l.name.toLowerCase().includes(linksSearch.toLowerCase()) ||
+    (l.description || '').toLowerCase().includes(linksSearch.toLowerCase()) ||
+    l.url.toLowerCase().includes(linksSearch.toLowerCase())
+  );
+  const sorted = [...filtered].sort((a, b) => a.name.localeCompare(b.name));
+  return `
+    <div class="page-header">
+      <div><h2>Links</h2><div class="sub">${state.links.length} saved link${state.links.length === 1 ? '' : 's'}</div></div>
+      <button class="btn btn-secondary" id="links-report-pdf-btn">⬇ PDF</button>
+    </div>
+    <div class="searchbar"><span class="ic">🔍</span><input id="link-search" autocomplete="off" placeholder="Search links..." value="${esc(linksSearch)}"></div>
+    <div class="list" id="link-list">${sorted.length ? sorted.map(linkRow).join('') : emptyState('🔗', 'No links saved yet', 'Add a link with the + button below')}</div>
+  `;
+}
+function linkRow(l) {
+  return `
+    <div class="row" data-id="${l.id}">
+      <div class="row-main" data-action="open" style="cursor:pointer;">
+        <div class="row-title">${esc(l.name)}</div>
+        ${l.description ? `<div class="row-meta">${esc(l.description)}</div>` : ''}
+        <div class="row-meta" style="color:var(--primary); word-break:break-all;">${esc(l.url)}</div>
+      </div>
+      <div class="row-actions">
+        <button class="btn-icon" data-action="edit">✎</button>
+        <button class="btn-icon" data-action="delete">🗑</button>
+      </div>
+    </div>`;
+}
+function afterRenderLinks() {
+  document.getElementById('link-search').addEventListener('input', e => { linksSearch = e.target.value; render(); document.getElementById('link-search').focus(); });
+  document.getElementById('links-report-pdf-btn').addEventListener('click', downloadLinksReportPDF);
+  document.querySelectorAll('#link-list .row').forEach(row => {
+    const id = row.dataset.id;
+    row.querySelector('[data-action="open"]').addEventListener('click', () => {
+      const l = state.links.find(x => x.id === id);
+      if (l) window.open(l.url, '_blank', 'noopener,noreferrer');
+    });
+    row.querySelector('[data-action="edit"]').addEventListener('click', () => openLinkModal(state.links.find(x => x.id === id)));
+    row.querySelector('[data-action="delete"]').addEventListener('click', () => {
+      confirmDialog('Delete link?', 'This link will be permanently removed.', () => {
+        state.links = state.links.filter(x => x.id !== id); persist('links'); render(); showToast('Link deleted');
+      });
+    });
+  });
+}
+function normalizeUrl(raw) {
+  const url = raw.trim();
+  if (!url) return url;
+  return /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(url) ? url : 'https://' + url;
+}
+function openLinkModal(item) {
+  const editing = !!item;
+  openModal(`
+    <div class="modal-head"><h3>${editing ? 'Edit link' : 'Add link'}</h3><button class="btn-icon" id="modal-close">✕</button></div>
+    <div class="field"><label>Name</label><input id="f-name" autocomplete="off" value="${esc(item?.name||'')}" placeholder="e.g. Company handbook"></div>
+    <div class="field"><label>URL</label><input id="f-url" autocomplete="off" value="${esc(item?.url||'')}" placeholder="e.g. example.com/page" type="url"></div>
+    <div class="field"><label>Description (optional)</label><textarea id="f-desc" autocomplete="off" placeholder="Add any extra detail">${esc(item?.description||'')}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+      <button class="btn btn-primary" id="modal-save">${editing?'Save changes':'Add link'}</button>
+    </div>
+  `);
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('modal-cancel').addEventListener('click', closeModal);
+  document.getElementById('modal-save').addEventListener('click', () => {
+    const name = document.getElementById('f-name').value.trim();
+    const url = normalizeUrl(document.getElementById('f-url').value);
+    if (!name) { showToast('Please enter a name', 'error'); return; }
+    if (!url) { showToast('Please enter a URL', 'error'); return; }
+    const data = { name, url, description: document.getElementById('f-desc').value.trim() };
+    if (editing) { Object.assign(item, data); showToast('Link updated'); }
+    else { state.links.push({ id: uid(), ...data }); showToast('Link added'); }
+    persist('links'); closeModal(); render();
+  });
+}
+function downloadLinksReportPDF() {
+  const rows = [...state.links].sort((a, b) => a.name.localeCompare(b.name)).map(l => [l.name, l.url, l.description || '']);
+  downloadPDFReport(
+    'Saved Links — DailyLife',
+    ['Name', 'URL', 'Description'],
+    rows,
+    `links-report-${todayISO()}.pdf`,
+    [`Total links: ${state.links.length}`]
+  );
+}
+
 /* ============================== NOTES ============================== */
 function renderNotesPage() {
   const filtered = state.notes.filter(n => !notesSearch || n.title.toLowerCase().includes(notesSearch.toLowerCase()) || n.body.toLowerCase().includes(notesSearch.toLowerCase()));
@@ -1666,7 +1960,7 @@ function renderNotesPage() {
       <div><div class="card-title">Pinned</div><div class="stat-value">${state.notes.filter(n=>n.pinned).length}</div></div>
       <div style="flex:1; max-width:160px; height:70px;"><canvas id="note-chart"></canvas></div>
     </div>` : ''}
-    <div class="searchbar"><span class="ic">🔍</span><input id="note-search" placeholder="Search notes..." value="${esc(notesSearch)}"></div>
+    <div class="searchbar"><span class="ic">🔍</span><input id="note-search" autocomplete="off" placeholder="Search notes..." value="${esc(notesSearch)}"></div>
     ${pinned.length ? `<div class="section-title">📌 Pinned</div><div class="grid grid-3" id="pinned-notes">${pinned.map(noteCard).join('')}</div>` : ''}
     <div class="section-title">${pinned.length ? 'All notes' : ''}</div>
     <div class="grid grid-3" id="note-grid">${rest.length ? rest.map(noteCard).join('') : (filtered.length===0 ? emptyState('📝','No notes found','Create a note to capture your thoughts') : '')}</div>
@@ -1705,8 +1999,8 @@ function openNoteModal(item) {
   const editing = !!item;
   openModal(`
     <div class="modal-head"><h3>${editing?'Edit note':'New note'}</h3><button class="btn-icon" id="modal-close">✕</button></div>
-    <div class="field"><label>Title</label><input id="f-title" value="${esc(item?.title||'')}" placeholder="Note title"></div>
-    <div class="field"><label>Content</label><textarea id="f-body" style="min-height:120px;">${esc(item?.body||'')}</textarea></div>
+    <div class="field"><label>Title</label><input id="f-title" autocomplete="off" value="${esc(item?.title||'')}" placeholder="Note title"></div>
+    <div class="field"><label>Content</label><textarea id="f-body" autocomplete="off" style="min-height:120px;">${esc(item?.body||'')}</textarea></div>
     <div class="field" style="display:flex; align-items:center; gap:8px;">
       <input type="checkbox" id="f-pinned" ${item?.pinned?'checked':''} style="width:auto;"> <label style="margin:0;">Pin this note</label>
     </div>
@@ -1764,6 +2058,7 @@ function billRow(b) {
           <span>Due ${fmtDate(b.dueDate)}</span>
           <span>↻ ${b.repeat}</span>
         </div>
+        ${b.description ? `<div class="row-meta">${esc(b.description)}</div>` : ''}
       </div>
       <div style="font-weight:800;">${fmtMoney(b.amount)}</div>
       <div class="row-actions">
@@ -1795,8 +2090,8 @@ function afterRenderBills() {
   }
 }
 function downloadBillsReport() {
-  const rows = [['Name','Amount','Due Date','Repeat','Status']];
-  state.bills.forEach(b => rows.push([b.name, b.amount, b.dueDate, b.repeat, b.status]));
+  const rows = [['Name','Amount','Due Date','Repeat','Status','Description']];
+  state.bills.forEach(b => rows.push([b.name, b.amount, b.dueDate, b.repeat, b.status, b.description || '']));
   downloadBlob(`bills-report-${todayISO()}.csv`, toCSV(rows), 'text/csv');
   showToast('Report downloaded');
 }
@@ -1817,15 +2112,16 @@ function openBillModal(item) {
   const editing = !!item;
   openModal(`
     <div class="modal-head"><h3>${editing?'Edit bill':'Add bill'}</h3><button class="btn-icon" id="modal-close">✕</button></div>
-    <div class="field"><label>Name</label><input id="f-name" value="${esc(item?.name||'')}" placeholder="e.g. Electricity"></div>
+    <div class="field"><label>Name</label><input id="f-name" autocomplete="off" value="${esc(item?.name||'')}" placeholder="e.g. Electricity"></div>
     <div class="field-row">
-      <div class="field"><label>Amount</label><input id="f-amount" type="number" step="0.01" value="${item?.amount??''}"></div>
-      <div class="field"><label>Due date</label><input id="f-due" type="date" value="${item?.dueDate||todayISO()}"></div>
+      <div class="field"><label>Amount</label><input id="f-amount" autocomplete="off" type="number" step="0.01" value="${item?.amount??''}"></div>
+      <div class="field"><label>Due date</label><input id="f-due" autocomplete="off" type="date" value="${item?.dueDate||todayISO()}"></div>
     </div>
     <div class="field-row">
       <div class="field"><label>Repeat</label><select id="f-repeat">${REPEAT_OPTIONS.filter(o=>o!=='None').map(o=>`<option ${item?.repeat===o?'selected':''}>${o}</option>`).join('')}</select></div>
       <div class="field"><label>Status</label><select id="f-status">${BILL_STATUS.map(s=>`<option ${item?.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
     </div>
+    <div class="field"><label>Description (optional)</label><textarea id="f-desc" autocomplete="off" placeholder="Add any extra detail">${esc(item?.description||'')}</textarea></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
       <button class="btn btn-primary" id="modal-save">${editing?'Save changes':'Add bill'}</button>
@@ -1837,7 +2133,7 @@ function openBillModal(item) {
     const name = document.getElementById('f-name').value.trim();
     const amount = parseFloat(document.getElementById('f-amount').value);
     if (!name || !amount) { showToast('Please fill in name and amount', 'error'); return; }
-    const data = { name, amount, dueDate: document.getElementById('f-due').value || todayISO(), repeat: document.getElementById('f-repeat').value, status: document.getElementById('f-status').value };
+    const data = { name, amount, dueDate: document.getElementById('f-due').value || todayISO(), repeat: document.getElementById('f-repeat').value, status: document.getElementById('f-status').value, description: document.getElementById('f-desc').value.trim() };
     if (editing) { Object.assign(item, data); showToast('Bill updated'); }
     else { state.bills.push({ id: uid(), ...data }); showToast('Bill added'); }
     persist('bills'); closeModal(); render();
@@ -1904,10 +2200,10 @@ function openDocModal(item) {
   const editing = !!item;
   openModal(`
     <div class="modal-head"><h3>${editing?'Edit document':'Add document'}</h3><button class="btn-icon" id="modal-close">✕</button></div>
-    <div class="field"><label>Document / product name</label><input id="f-name" value="${esc(item?.name||'')}" placeholder="e.g. Laptop warranty"></div>
+    <div class="field"><label>Document / product name</label><input id="f-name" autocomplete="off" value="${esc(item?.name||'')}" placeholder="e.g. Laptop warranty"></div>
     <div class="field"><label>Type</label><select id="f-type">${DOC_TYPES.map(t=>`<option ${item?.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
-    <div class="field"><label>Expiry date</label><input id="f-expiry" type="date" value="${item?.expiryDate||''}"></div>
-    <div class="field"><label>Notes</label><textarea id="f-notes">${esc(item?.notes||'')}</textarea></div>
+    <div class="field"><label>Expiry date</label><input id="f-expiry" autocomplete="off" type="date" value="${item?.expiryDate||''}"></div>
+    <div class="field"><label>Notes</label><textarea id="f-notes" autocomplete="off">${esc(item?.notes||'')}</textarea></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
       <button class="btn btn-primary" id="modal-save">${editing?'Save changes':'Add document'}</button>
@@ -2053,7 +2349,53 @@ function afterRenderDashboard() {
 
 /* ============================== PROFILE & SETTINGS ============================== */
 let deferredInstallPrompt = null;
-window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstallPrompt = e; });
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstallPrompt = e; showInstallBanner(); });
+
+/* ===================== Install banner: nudges people opening this in a plain browser tab to install it ===================== */
+let installBannerShown = false;
+function isRunningStandalone() {
+  return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+}
+function shouldOfferInstallBanner() {
+  if (isRunningStandalone()) return false; // already installed/running as an app
+  const dismissedAt = Number(localStorage.getItem('dailylife_install_dismissed_at') || 0);
+  if (dismissedAt && Date.now() - dismissedAt < 7 * 24 * 60 * 60 * 1000) return false; // don't nag more than once a week
+  return true;
+}
+function showInstallBanner() {
+  if (installBannerShown || document.getElementById('install-banner') || !shouldOfferInstallBanner()) return;
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+  if (!deferredInstallPrompt && !isIOS) return; // nothing actionable to offer on this platform yet
+  installBannerShown = true;
+  const banner = document.createElement('div');
+  banner.id = 'install-banner';
+  banner.className = 'install-banner';
+  banner.innerHTML = `
+    <div class="install-banner-icon">DL</div>
+    <div class="install-banner-text">
+      <div class="install-banner-title">Install DailyLife</div>
+      <div class="install-banner-sub">${isIOS ? 'Tap the Share icon, then "Add to Home Screen"' : 'Add it to your home screen for the full app experience'}</div>
+    </div>
+    ${!isIOS ? '<button class="btn btn-primary btn-sm" id="install-banner-btn">Install</button>' : ''}
+    <button class="btn-icon" id="install-banner-close">✕</button>
+  `;
+  document.body.insertBefore(banner, document.body.firstChild);
+  document.getElementById('install-banner-close').addEventListener('click', dismissInstallBanner);
+  const installBtn = document.getElementById('install-banner-btn');
+  if (installBtn) installBtn.addEventListener('click', async () => {
+    if (!deferredInstallPrompt) { dismissInstallBanner(); return; }
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    dismissInstallBanner();
+  });
+}
+function dismissInstallBanner() {
+  const el = document.getElementById('install-banner');
+  if (el) el.remove();
+  installBannerShown = false;
+  try { localStorage.setItem('dailylife_install_dismissed_at', String(Date.now())); } catch (e) { /* ignore */ }
+}
 
 function renderProfilePage() {
   const p = state.settings.profile;
@@ -2112,7 +2454,7 @@ function renderProfilePage() {
 
     <div class="section-title">Install app</div>
     <div class="card" style="margin-bottom:16px;">
-      <div class="stat-sub" style="margin-bottom:10px;">Add DailyLife to your home screen so it opens like a native app, with working notifications. Host <code>dailylife.html</code> and <code>sw.js</code> together over HTTPS (opening the file directly won't support this). On Android/Chrome, tap Install below. On iPhone, use the Share button → Add to Home Screen.</div>
+      <div class="stat-sub" style="margin-bottom:10px;">Add DailyLife to your home screen so it opens like a native app, with working notifications. Host <code>index.html</code>, <code>sw.js</code>, and <code>manifest.json</code> together over HTTPS (opening the file directly won't support this). On Android/Chrome, tap Install below. On iPhone, use the Share button → Add to Home Screen.</div>
       <button class="btn btn-primary btn-sm" id="install-btn" style="display:none;">📲 Install app</button>
     </div>
 
@@ -2121,6 +2463,8 @@ function renderProfilePage() {
       <div style="font-weight:700; font-size:14px;">Dark mode</div>
       <span class="switch" id="profile-theme-switch" style="cursor:pointer;"></span>
     </div>
+
+    <div style="text-align:center; color:var(--muted); font-size:11.5px; margin-top:26px; padding-bottom:6px;">DailyLife v${APP_VERSION}</div>
   `;
 }
 function afterRenderProfile() {
@@ -2176,8 +2520,8 @@ function openProfileEditModal() {
       <div class="avatar-lg ${p.avatarType==='emoji'?'emoji-mode':''}" id="edit-avatar-preview" style="cursor:pointer;">${avatarDisplay()}</div>
     </div>
     <button class="btn btn-secondary btn-sm" id="change-avatar-btn" style="width:100%; margin-bottom:16px;">Change avatar</button>
-    <div class="field"><label>Name</label><input id="f-name" value="${esc(p.name)}" placeholder="Your name"></div>
-    <div class="field"><label>Email (optional)</label><input id="f-email" type="email" value="${esc(p.email)}" placeholder="you@example.com"></div>
+    <div class="field"><label>Name</label><input id="f-name" autocomplete="off" value="${esc(p.name)}" placeholder="Your name"></div>
+    <div class="field"><label>Email (optional)</label><input id="f-email" autocomplete="off" type="email" value="${esc(p.email)}" placeholder="you@example.com"></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
       <button class="btn btn-primary" id="modal-save">Save</button>
@@ -2218,10 +2562,10 @@ function openPinSetupModal(mode) {
   const needsCurrent = mode !== 'enable';
   openModal(`
     <div class="modal-head"><h3>${mode==='enable'?'Set up app lock':mode==='change'?'Change PIN':'Turn off app lock'}</h3><button class="btn-icon" id="modal-close">✕</button></div>
-    ${needsCurrent ? `<div class="field"><label>Current PIN</label><input id="f-current-pin" type="password" inputmode="numeric" maxlength="4" placeholder="••••"></div>` : ''}
+    ${needsCurrent ? `<div class="field"><label>Current PIN</label><input id="f-current-pin" autocomplete="off" type="password" inputmode="numeric" maxlength="4" placeholder="••••"></div>` : ''}
     ${mode !== 'disable' ? `
-    <div class="field"><label>New 4-digit PIN</label><input id="f-new-pin" type="password" inputmode="numeric" maxlength="4" placeholder="••••"></div>
-    <div class="field"><label>Confirm PIN</label><input id="f-confirm-pin" type="password" inputmode="numeric" maxlength="4" placeholder="••••"></div>
+    <div class="field"><label>New 4-digit PIN</label><input id="f-new-pin" autocomplete="off" type="password" inputmode="numeric" maxlength="4" placeholder="••••"></div>
+    <div class="field"><label>Confirm PIN</label><input id="f-confirm-pin" autocomplete="off" type="password" inputmode="numeric" maxlength="4" placeholder="••••"></div>
     ` : `<p style="color:var(--muted); font-size:13px; line-height:1.5;">This removes your PIN and turns off app lock. Anyone with access to this browser will be able to open DailyLife.</p>`}
     <div class="modal-actions">
       <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
@@ -2251,11 +2595,12 @@ function openPinSetupModal(mode) {
     state.settings.security.salt = salt;
     state.settings.security.passwordHash = hash;
     persist('settings'); closeModal(); showToast(mode === 'enable' ? 'App lock enabled' : 'PIN updated'); render();
+    if (mode === 'enable' && !backGuardArmed) armBackGuard(); // so the back button locks immediately, without needing a reload
   });
 }
 
 /* ---- init ---- */
-if (state.settings.security.enabled) { showLockScreen(); } else { applyTheme(); render(); checkDueNotifications(); }
+if (state.settings.security.enabled) { showLockScreen(); } else { applyTheme(); bootApp(); }
 
 </script>
 </body>
