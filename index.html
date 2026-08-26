@@ -440,7 +440,7 @@ a{color:inherit;}
 /* Bump this on every edit/release. Shown at the bottom of Profile & Settings so
    it's easy to confirm which build is actually running (e.g. after a deploy or
    a browser cache refresh). */
-const APP_VERSION = '1.12.0';
+const APP_VERSION = '1.14.0';
 
 /* ---------- Storage keys ---------- */
 const STORAGE_KEYS = {
@@ -1555,13 +1555,18 @@ function downloadFinanceMonthlyReportPDF() {
   const expenseThisMonth = state.expenses.filter(e => e.date >= monthStart);
   const totalIncome = sum(incomeThisMonth);
   const totalExpense = sum(expenseThisMonth);
-  const rows = [];
-  incomeThisMonth.forEach(e => rows.push(['Income', fmtDate(e.date), e.category, e.paymentMethod || '', e.description || '', fmtMoneyPDF(e.amount)]));
-  expenseThisMonth.forEach(e => rows.push(['Expense', fmtDate(e.date), e.category, e.paymentMethod || '', e.description || '', fmtMoneyPDF(e.amount)]));
-  rows.sort((a, b) => a[1].localeCompare(b[1]));
+  const combined = [
+    ...incomeThisMonth.map(e => ({ ...e, type: 'Income', signedAmount: Number(e.amount) })),
+    ...expenseThisMonth.map(e => ({ ...e, type: 'Expense', signedAmount: -Number(e.amount) })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
+  let running = 0;
+  const rows = combined.map(e => {
+    running += e.signedAmount;
+    return [e.type, fmtDate(e.date), e.category, e.paymentMethod || '', e.description || '', fmtMoneyPDF(e.amount), fmtMoneyPDF(running)];
+  });
   downloadPDFReport(
     'Monthly Finance Report — DailyLife',
-    ['Type','Date','Category','Payment','Description','Amount'],
+    ['Type','Date','Category','Payment','Description','Amount','Balance'],
     rows,
     `finance-monthly-report-${todayISO()}.pdf`,
     [
@@ -1576,34 +1581,39 @@ function downloadFinanceTotalReport() {
   const rows = [['Type','Date','Category','Payment Method','Description','Amount']];
   state.income.forEach(e => rows.push(['Income', e.date, e.category, e.paymentMethod || '', e.description || '', e.amount]));
   state.expenses.forEach(e => rows.push(['Expense', e.date, e.category, e.paymentMethod || '', e.description || '', e.amount]));
-  const cashTotal = sum(state.income.filter(e => e.paymentMethod !== 'UPI')) + sum(state.expenses.filter(e => e.paymentMethod !== 'UPI'));
-  const upiTotal = sum(state.income.filter(e => e.paymentMethod === 'UPI')) + sum(state.expenses.filter(e => e.paymentMethod === 'UPI'));
+  const cashExpense = sum(state.expenses.filter(e => e.paymentMethod !== 'UPI'));
+  const upiExpense = sum(state.expenses.filter(e => e.paymentMethod === 'UPI'));
   rows.push([]);
-  rows.push(['Summary','','','','Cash total', cashTotal]);
-  rows.push(['Summary','','','','UPI total', upiTotal]);
+  rows.push(['Summary','','','','Cash expense', cashExpense]);
+  rows.push(['Summary','','','','UPI expense', upiExpense]);
   downloadBlob(`finance-total-report-${todayISO()}.csv`, toCSV(rows), 'text/csv');
   showToast('Total report downloaded');
 }
 function downloadFinanceTotalReportPDF() {
   const totalIncome = sum(state.income);
   const totalExpense = sum(state.expenses);
-  const cashTotal = sum(state.income.filter(e => e.paymentMethod !== 'UPI')) + sum(state.expenses.filter(e => e.paymentMethod !== 'UPI'));
-  const upiTotal = sum(state.income.filter(e => e.paymentMethod === 'UPI')) + sum(state.expenses.filter(e => e.paymentMethod === 'UPI'));
-  const rows = [];
-  state.income.forEach(e => rows.push(['Income', fmtDate(e.date), e.category, e.paymentMethod || '', e.description || '', fmtMoneyPDF(e.amount)]));
-  state.expenses.forEach(e => rows.push(['Expense', fmtDate(e.date), e.category, e.paymentMethod || '', e.description || '', fmtMoneyPDF(e.amount)]));
-  rows.sort((a, b) => a[1].localeCompare(b[1]));
+  const cashExpense = sum(state.expenses.filter(e => e.paymentMethod !== 'UPI'));
+  const upiExpense = sum(state.expenses.filter(e => e.paymentMethod === 'UPI'));
+  const combined = [
+    ...state.income.map(e => ({ ...e, type: 'Income', signedAmount: Number(e.amount) })),
+    ...state.expenses.map(e => ({ ...e, type: 'Expense', signedAmount: -Number(e.amount) })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
+  let running = 0;
+  const rows = combined.map(e => {
+    running += e.signedAmount;
+    return [e.type, fmtDate(e.date), e.category, e.paymentMethod || '', e.description || '', fmtMoneyPDF(e.amount), fmtMoneyPDF(running)];
+  });
   downloadPDFReport(
     'Total Finance Report — DailyLife',
-    ['Type','Date','Category','Payment','Description','Amount'],
+    ['Type','Date','Category','Payment','Description','Amount','Balance'],
     rows,
     `finance-total-report-${todayISO()}.pdf`,
     [
       `All-time total income: ${fmtMoneyPDF(totalIncome)}`,
       `All-time total expenses: ${fmtMoneyPDF(totalExpense)}`,
       `Net balance: ${fmtMoneyPDF(totalIncome - totalExpense)}`,
-      `Cash total: ${fmtMoneyPDF(cashTotal)}`,
-      `UPI total: ${fmtMoneyPDF(upiTotal)}`,
+      `Cash expense: ${fmtMoneyPDF(cashExpense)}`,
+      `UPI expense: ${fmtMoneyPDF(upiExpense)}`,
     ]
   );
 }
@@ -1611,32 +1621,45 @@ function openFinanceTotalModal() {
   const totalIncome = sum(state.income);
   const totalExpense = sum(state.expenses);
   const net = totalIncome - totalExpense;
-  const cashTotal = sum(state.income.filter(e => e.paymentMethod !== 'UPI')) + sum(state.expenses.filter(e => e.paymentMethod !== 'UPI'));
-  const upiTotal = sum(state.income.filter(e => e.paymentMethod === 'UPI')) + sum(state.expenses.filter(e => e.paymentMethod === 'UPI'));
   const cashIncome = sum(state.income.filter(e => e.paymentMethod !== 'UPI'));
-  const cashExpense = sum(state.expenses.filter(e => e.paymentMethod !== 'UPI'));
   const upiIncome = sum(state.income.filter(e => e.paymentMethod === 'UPI'));
+  const cashExpense = sum(state.expenses.filter(e => e.paymentMethod !== 'UPI'));
   const upiExpense = sum(state.expenses.filter(e => e.paymentMethod === 'UPI'));
+  const cashNet = cashIncome - cashExpense;
+  const upiNet = upiIncome - upiExpense;
   openModal(`
     <div class="modal-head"><h3>Total statistics</h3><button class="btn-icon" id="modal-close">✕</button></div>
-    <div class="grid grid-3" style="margin-bottom:14px;">
-      <div class="card"><div class="card-title">Total income</div><div class="stat-value" style="color:var(--primary); font-size:18px;">${fmtMoney(totalIncome)}</div></div>
-      <div class="card"><div class="card-title">Total expenses</div><div class="stat-value" style="color:var(--danger); font-size:18px;">${fmtMoney(totalExpense)}</div></div>
-      <div class="card"><div class="card-title">Net balance</div><div class="stat-value" style="color:${net>=0?'var(--primary)':'var(--danger)'}; font-size:18px;">${net>=0?'+':''}${fmtMoney(net)}</div></div>
+
+    <div class="section-title" style="margin-top:0;">Total balance</div>
+    <div class="card" style="margin-bottom:10px;">
+      <div class="stat-value" style="color:${net>=0?'var(--primary)':'var(--danger)'}; font-size:22px;">${net>=0?'+':''}${fmtMoney(net)}</div>
     </div>
-    <div class="section-title" style="margin-top:0;">By payment method</div>
     <div class="grid grid-2" style="margin-bottom:14px;">
       <div class="card">
-        <div class="card-title">💵 Cash total</div>
-        <div class="stat-value" style="font-size:17px;">${fmtMoney(cashTotal)}</div>
-        <div class="stat-sub">${fmtMoney(cashIncome)} in · ${fmtMoney(cashExpense)} out</div>
+        <div class="card-title">💵 Cash balance</div>
+        <div class="stat-value" style="color:${cashNet>=0?'var(--primary)':'var(--danger)'}; font-size:18px;">${cashNet>=0?'+':''}${fmtMoney(cashNet)}</div>
       </div>
       <div class="card">
-        <div class="card-title">📱 UPI total</div>
-        <div class="stat-value" style="font-size:17px;">${fmtMoney(upiTotal)}</div>
-        <div class="stat-sub">${fmtMoney(upiIncome)} in · ${fmtMoney(upiExpense)} out</div>
+        <div class="card-title">📱 UPI balance</div>
+        <div class="stat-value" style="color:${upiNet>=0?'var(--primary)':'var(--danger)'}; font-size:18px;">${upiNet>=0?'+':''}${fmtMoney(upiNet)}</div>
       </div>
     </div>
+
+    <div class="section-title">Total expense</div>
+    <div class="card" style="margin-bottom:10px;">
+      <div class="stat-value" style="color:var(--danger); font-size:22px;">${fmtMoney(totalExpense)}</div>
+    </div>
+    <div class="grid grid-2" style="margin-bottom:14px;">
+      <div class="card">
+        <div class="card-title">💵 Cash expense</div>
+        <div class="stat-value" style="color:var(--danger); font-size:18px;">${fmtMoney(cashExpense)}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">📱 UPI expense</div>
+        <div class="stat-value" style="color:var(--danger); font-size:18px;">${fmtMoney(upiExpense)}</div>
+      </div>
+    </div>
+
     <div class="stat-sub" style="margin-bottom:16px;">All time, across ${state.income.length} income and ${state.expenses.length} expense entries.</div>
     <div class="modal-actions">
       <button class="btn btn-secondary" id="total-csv-btn">⬇ CSV</button>
@@ -2132,7 +2155,7 @@ function renderQuotesPage() {
 function quoteCard(q) {
   return `
     <div class="note-card" data-id="${q.id}">
-      <div class="note-body" style="font-style:italic; -webkit-line-clamp:5;">“${esc(q.text)}”</div>
+      <div class="note-body" style="font-style:italic; -webkit-line-clamp:5; white-space:pre-wrap;">“${esc(q.text)}”</div>
       ${q.author ? `<div class="note-date" style="font-weight:700; color:var(--ink);">— ${esc(q.author)}</div>` : ''}
     </div>`;
 }
@@ -2170,9 +2193,12 @@ function openQuoteModal(item) {
     });
   });
   document.getElementById('modal-save').addEventListener('click', () => {
-    const text = document.getElementById('f-text').value.trim();
-    if (!text) { showToast('Please write a quote', 'error'); return; }
-    const data = { text, author: document.getElementById('f-author').value.trim() };
+    const rawText = document.getElementById('f-text').value;
+    if (!rawText.trim()) { showToast('Please write a quote', 'error'); return; }
+    // Store exactly as typed — no trimming — so intentional formatting (indentation, line breaks,
+    // leading/trailing spacing in a poem or quote) survives. Only the author field gets trimmed,
+    // since a name has no reason to carry stray whitespace.
+    const data = { text: rawText, author: document.getElementById('f-author').value.trim() };
     if (editing) { Object.assign(item, data); showToast('Quote updated'); }
     else { state.quotes.push({ id: uid(), ...data, date: todayISO() }); showToast('Quote added'); }
     persist('quotes'); closeModal(); render();
