@@ -210,6 +210,7 @@ a{color:inherit;}
 }
 .field input:focus, .field select:focus, .field textarea:focus{outline:2px solid var(--primary); outline-offset:-1px;}
 .field textarea{resize:vertical; min-height:70px;}
+.note-content-textarea{font-size:15.5px !important; line-height:1.55 !important; min-height:160px !important;}
 .field-row{display:flex; gap:10px;}
 .field-row > .field{flex:1;}
 
@@ -286,7 +287,7 @@ a{color:inherit;}
 .note-card.pinned{border-color:var(--accent);}
 .pin-badge{position:absolute; top:10px; right:10px; color:var(--accent); font-size:14px;}
 .note-title{font-weight:800; font-size:14.5px;}
-.note-body{font-size:12.5px; color:var(--muted); overflow:hidden; display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical;}
+.note-body{font-size:14px; line-height:1.45; color:var(--muted); overflow:hidden; display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical;}
 .note-date{font-size:11px; color:var(--muted);}
 .alert-banner{display:flex; gap:10px; align-items:flex-start; background:var(--danger-light); color:var(--danger); border-radius:var(--radius-sm); padding:11px 13px; font-size:12.5px; font-weight:600; margin-bottom:10px;}
 .alert-banner.warn{background:var(--accent-light); color:#8A5A0E;}
@@ -439,7 +440,7 @@ a{color:inherit;}
 /* Bump this on every edit/release. Shown at the bottom of Profile & Settings so
    it's easy to confirm which build is actually running (e.g. after a deploy or
    a browser cache refresh). */
-const APP_VERSION = '1.11.0';
+const APP_VERSION = '1.12.0';
 
 /* ---------- Storage keys ---------- */
 const STORAGE_KEYS = {
@@ -451,6 +452,7 @@ const STORAGE_KEYS = {
   reminders: 'dailylife_reminders',
   links: 'dailylife_links',
   notes: 'dailylife_notes',
+  quotes: 'dailylife_quotes',
   bills: 'dailylife_bills',
   documents: 'dailylife_documents',
   settings: 'dailylife_settings',
@@ -529,6 +531,7 @@ const state = {
   reminders: loadFromStorage(STORAGE_KEYS.reminders, []),
   links: loadFromStorage(STORAGE_KEYS.links, []),
   notes: loadFromStorage(STORAGE_KEYS.notes, []),
+  quotes: loadFromStorage(STORAGE_KEYS.quotes, []),
   bills: loadFromStorage(STORAGE_KEYS.bills, []),
   documents: loadFromStorage(STORAGE_KEYS.documents, []),
   settings: mergeDefaults(loadFromStorage(STORAGE_KEYS.settings, {}), DEFAULT_SETTINGS),
@@ -585,12 +588,13 @@ const ROUTES = [
   { id: 'reminders', label: 'Reminders', icon: '🔔' },
   { id: 'links', label: 'Links', icon: '🔗' },
   { id: 'notes', label: 'Notes', icon: '📝' },
+  { id: 'quotes', label: 'Quotes', icon: '💬' },
   { id: 'bills', label: 'Bills', icon: '💳' },
   { id: 'documents', label: 'Documents', icon: '📄' },
   { id: 'profile', label: 'Profile', icon: '👤' },
 ];
 // Routes that have a natural "add new item" action for the center FAB
-const FAB_ROUTES = { tasks: 1, planner: 1, expenses: 1, shopping: 1, reminders: 1, links: 1, notes: 1, bills: 1, documents: 1 };
+const FAB_ROUTES = { tasks: 1, planner: 1, expenses: 1, shopping: 1, reminders: 1, links: 1, notes: 1, quotes: 1, bills: 1, documents: 1 };
 
 let currentRoute = (location.hash || '#/dashboard').replace('#/', '');
 if (!ROUTES.some(r => r.id === currentRoute)) currentRoute = 'dashboard';
@@ -609,6 +613,7 @@ function navigateTo(routeId) {
 let taskFilter = 'all';
 let taskSearch = '';
 let plannerDate = todayISO();
+let plannerView = 'day'; // 'day' | 'all'
 let financeTab = 'expense'; // 'expense' | 'income'
 let notesSearch = '';
 
@@ -694,6 +699,7 @@ function centralAddHandler() {
     case 'reminders': openReminderModal(); break;
     case 'links': openLinkModal(); break;
     case 'notes': openNoteModal(); break;
+    case 'quotes': openQuoteModal(); break;
     case 'bills': openBillModal(); break;
     case 'documents': openDocModal(); break;
   }
@@ -982,10 +988,15 @@ function checkDueNotifications() {
   const notified = new Set(state.settings.notifications.notifiedIds);
   let changed = false;
   state.reminders.forEach(r => {
-    const key = 'rem_' + r.id + '_' + r.date;
-    if (!notified.has(key) && daysBetween(r.date) === 0) {
+    const dueTodayKey = 'rem_' + r.id + '_' + r.date;
+    if (!notified.has(dueTodayKey) && daysBetween(r.date) === 0) {
       showAppNotification('Reminder: ' + r.title, { body: r.description || ('Due today' + (r.time ? ' at ' + r.time : '')) });
-      notified.add(key); changed = true;
+      notified.add(dueTodayKey); changed = true;
+    }
+    const dayBeforeKey = 'rem_1day_' + r.id + '_' + r.date;
+    if (!notified.has(dayBeforeKey) && daysBetween(r.date) === 1) {
+      showAppNotification('Coming up tomorrow: ' + r.title, { body: r.description || ('Due tomorrow' + (r.time ? ' at ' + r.time : '')) });
+      notified.add(dayBeforeKey); changed = true;
     }
   });
   state.bills.forEach(b => {
@@ -1086,6 +1097,7 @@ function render() {
     case 'reminders': el.innerHTML = renderRemindersPage(); afterRenderReminders(); break;
     case 'links': el.innerHTML = renderLinksPage(); afterRenderLinks(); break;
     case 'notes': el.innerHTML = renderNotesPage(); afterRenderNotes(); break;
+    case 'quotes': el.innerHTML = renderQuotesPage(); afterRenderQuotes(); break;
     case 'bills': el.innerHTML = renderBillsPage(); afterRenderBills(); break;
     case 'documents': el.innerHTML = renderDocumentsPage(); afterRenderDocuments(); break;
     case 'profile': el.innerHTML = renderProfilePage(); afterRenderProfile(); break;
@@ -1264,6 +1276,28 @@ function shiftPlannerDate(days) {
   render();
 }
 function renderPlannerPage() {
+  const viewToggle = `
+    <div class="tabs">
+      <div class="tab ${plannerView==='day'?'active':''}" data-view="day">Day view</div>
+      <div class="tab ${plannerView==='all'?'active':''}" data-view="all">All plans</div>
+    </div>`;
+
+  if (plannerView === 'all') {
+    const all = [...state.planner].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const incomplete = all.filter(p => !p.completed);
+    const completed = all.filter(p => p.completed);
+    return `
+      <div class="page-header">
+        <div><h2>Daily Planner</h2><div class="sub">Every plan you've made, across all days</div></div>
+      </div>
+      ${viewToggle}
+      <div class="section-title" style="margin-top:0;">Incomplete (${incomplete.length})</div>
+      <div class="list">${incomplete.length ? incomplete.map(plannerRowAll).join('') : emptyState('☀️','Nothing pending','Everything is marked complete')}</div>
+      <div class="section-title">Completed (${completed.length})</div>
+      <div class="list">${completed.length ? completed.map(plannerRowAll).join('') : emptyState('✅','Nothing completed yet','Complete an activity to see it here')}</div>
+    `;
+  }
+
   const dayItems = state.planner.filter(p => p.date === plannerDate);
   const grouped = {}; PLANNER_SLOTS.forEach(s => grouped[s] = []);
   const customs = [];
@@ -1285,6 +1319,7 @@ function renderPlannerPage() {
     <div class="page-header">
       <div><h2>Daily Planner</h2><div class="sub">Plan any day — dates are continuous, so you can move freely</div></div>
     </div>
+    ${viewToggle}
     <div class="card" style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:16px; flex-wrap:wrap;">
       <div style="display:flex; align-items:center; gap:8px;">
         <button class="btn-icon" id="prev-day-btn">←</button>
@@ -1316,10 +1351,29 @@ function plannerRow(p) {
       </div>
     </div>`;
 }
+function plannerRowAll(p) {
+  return `
+    <div class="row" data-id="${p.id}">
+      <div class="row-check ${p.completed?'checked':''}" data-action="toggle">${p.completed?'✓':''}</div>
+      <div class="row-main">
+        <div class="row-title ${p.completed?'done':''}">${esc(p.activity)}</div>
+        <div class="row-meta"><span>${fmtDate(p.date)}</span><span>${esc(p.slot)}</span>${p.time ? `<span>${esc(p.time)}</span>` : ''}</div>
+        ${p.description ? `<div class="row-meta">${esc(p.description)}</div>` : ''}
+      </div>
+      <div class="row-actions">
+        <button class="btn-icon" data-action="edit">✎</button>
+        <button class="btn-icon" data-action="delete">🗑</button>
+      </div>
+    </div>`;
+}
 function afterRenderPlanner() {
-  document.getElementById('prev-day-btn').addEventListener('click', () => shiftPlannerDate(-1));
-  document.getElementById('next-day-btn').addEventListener('click', () => shiftPlannerDate(1));
-  document.getElementById('planner-date-input').addEventListener('change', e => { plannerDate = e.target.value || todayISO(); render(); });
+  document.querySelectorAll('[data-view]').forEach(el => el.addEventListener('click', () => { plannerView = el.dataset.view; render(); }));
+  const prevBtn = document.getElementById('prev-day-btn');
+  if (prevBtn) prevBtn.addEventListener('click', () => shiftPlannerDate(-1));
+  const nextBtn = document.getElementById('next-day-btn');
+  if (nextBtn) nextBtn.addEventListener('click', () => shiftPlannerDate(1));
+  const dateInput = document.getElementById('planner-date-input');
+  if (dateInput) dateInput.addEventListener('change', e => { plannerDate = e.target.value || todayISO(); render(); });
   const todayBtn = document.getElementById('today-btn');
   if (todayBtn) todayBtn.addEventListener('click', () => { plannerDate = todayISO(); render(); });
   document.querySelectorAll('.list .row').forEach(row => {
@@ -1522,12 +1576,19 @@ function downloadFinanceTotalReport() {
   const rows = [['Type','Date','Category','Payment Method','Description','Amount']];
   state.income.forEach(e => rows.push(['Income', e.date, e.category, e.paymentMethod || '', e.description || '', e.amount]));
   state.expenses.forEach(e => rows.push(['Expense', e.date, e.category, e.paymentMethod || '', e.description || '', e.amount]));
+  const cashTotal = sum(state.income.filter(e => e.paymentMethod !== 'UPI')) + sum(state.expenses.filter(e => e.paymentMethod !== 'UPI'));
+  const upiTotal = sum(state.income.filter(e => e.paymentMethod === 'UPI')) + sum(state.expenses.filter(e => e.paymentMethod === 'UPI'));
+  rows.push([]);
+  rows.push(['Summary','','','','Cash total', cashTotal]);
+  rows.push(['Summary','','','','UPI total', upiTotal]);
   downloadBlob(`finance-total-report-${todayISO()}.csv`, toCSV(rows), 'text/csv');
   showToast('Total report downloaded');
 }
 function downloadFinanceTotalReportPDF() {
   const totalIncome = sum(state.income);
   const totalExpense = sum(state.expenses);
+  const cashTotal = sum(state.income.filter(e => e.paymentMethod !== 'UPI')) + sum(state.expenses.filter(e => e.paymentMethod !== 'UPI'));
+  const upiTotal = sum(state.income.filter(e => e.paymentMethod === 'UPI')) + sum(state.expenses.filter(e => e.paymentMethod === 'UPI'));
   const rows = [];
   state.income.forEach(e => rows.push(['Income', fmtDate(e.date), e.category, e.paymentMethod || '', e.description || '', fmtMoneyPDF(e.amount)]));
   state.expenses.forEach(e => rows.push(['Expense', fmtDate(e.date), e.category, e.paymentMethod || '', e.description || '', fmtMoneyPDF(e.amount)]));
@@ -1541,6 +1602,8 @@ function downloadFinanceTotalReportPDF() {
       `All-time total income: ${fmtMoneyPDF(totalIncome)}`,
       `All-time total expenses: ${fmtMoneyPDF(totalExpense)}`,
       `Net balance: ${fmtMoneyPDF(totalIncome - totalExpense)}`,
+      `Cash total: ${fmtMoneyPDF(cashTotal)}`,
+      `UPI total: ${fmtMoneyPDF(upiTotal)}`,
     ]
   );
 }
@@ -1548,12 +1611,31 @@ function openFinanceTotalModal() {
   const totalIncome = sum(state.income);
   const totalExpense = sum(state.expenses);
   const net = totalIncome - totalExpense;
+  const cashTotal = sum(state.income.filter(e => e.paymentMethod !== 'UPI')) + sum(state.expenses.filter(e => e.paymentMethod !== 'UPI'));
+  const upiTotal = sum(state.income.filter(e => e.paymentMethod === 'UPI')) + sum(state.expenses.filter(e => e.paymentMethod === 'UPI'));
+  const cashIncome = sum(state.income.filter(e => e.paymentMethod !== 'UPI'));
+  const cashExpense = sum(state.expenses.filter(e => e.paymentMethod !== 'UPI'));
+  const upiIncome = sum(state.income.filter(e => e.paymentMethod === 'UPI'));
+  const upiExpense = sum(state.expenses.filter(e => e.paymentMethod === 'UPI'));
   openModal(`
     <div class="modal-head"><h3>Total statistics</h3><button class="btn-icon" id="modal-close">✕</button></div>
     <div class="grid grid-3" style="margin-bottom:14px;">
       <div class="card"><div class="card-title">Total income</div><div class="stat-value" style="color:var(--primary); font-size:18px;">${fmtMoney(totalIncome)}</div></div>
       <div class="card"><div class="card-title">Total expenses</div><div class="stat-value" style="color:var(--danger); font-size:18px;">${fmtMoney(totalExpense)}</div></div>
       <div class="card"><div class="card-title">Net balance</div><div class="stat-value" style="color:${net>=0?'var(--primary)':'var(--danger)'}; font-size:18px;">${net>=0?'+':''}${fmtMoney(net)}</div></div>
+    </div>
+    <div class="section-title" style="margin-top:0;">By payment method</div>
+    <div class="grid grid-2" style="margin-bottom:14px;">
+      <div class="card">
+        <div class="card-title">💵 Cash total</div>
+        <div class="stat-value" style="font-size:17px;">${fmtMoney(cashTotal)}</div>
+        <div class="stat-sub">${fmtMoney(cashIncome)} in · ${fmtMoney(cashExpense)} out</div>
+      </div>
+      <div class="card">
+        <div class="card-title">📱 UPI total</div>
+        <div class="stat-value" style="font-size:17px;">${fmtMoney(upiTotal)}</div>
+        <div class="stat-sub">${fmtMoney(upiIncome)} in · ${fmtMoney(upiExpense)} out</div>
+      </div>
     </div>
     <div class="stat-sub" style="margin-bottom:16px;">All time, across ${state.income.length} income and ${state.expenses.length} expense entries.</div>
     <div class="modal-actions">
@@ -2000,7 +2082,7 @@ function openNoteModal(item) {
   openModal(`
     <div class="modal-head"><h3>${editing?'Edit note':'New note'}</h3><button class="btn-icon" id="modal-close">✕</button></div>
     <div class="field"><label>Title</label><input id="f-title" autocomplete="off" value="${esc(item?.title||'')}" placeholder="Note title"></div>
-    <div class="field"><label>Content</label><textarea id="f-body" autocomplete="off" style="min-height:120px;">${esc(item?.body||'')}</textarea></div>
+    <div class="field"><label>Content</label><textarea id="f-body" autocomplete="off" class="note-content-textarea">${esc(item?.body||'')}</textarea></div>
     <div class="field" style="display:flex; align-items:center; gap:8px;">
       <input type="checkbox" id="f-pinned" ${item?.pinned?'checked':''} style="width:auto;"> <label style="margin:0;">Pin this note</label>
     </div>
@@ -2025,6 +2107,92 @@ function openNoteModal(item) {
     else { state.notes.push({ id: uid(), ...data }); showToast('Note created'); }
     persist('notes'); closeModal(); render();
   });
+}
+
+/* ============================== QUOTES ============================== */
+let quotesSearch = '';
+function renderQuotesPage() {
+  const filtered = state.quotes.filter(q =>
+    !quotesSearch ||
+    q.text.toLowerCase().includes(quotesSearch.toLowerCase()) ||
+    (q.author || '').toLowerCase().includes(quotesSearch.toLowerCase())
+  );
+  return `
+    <div class="page-header">
+      <div><h2>Quotes</h2><div class="sub">${state.quotes.length} saved quote${state.quotes.length === 1 ? '' : 's'}</div></div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-sm" id="quotes-csv-btn">⬇ CSV</button>
+        <button class="btn btn-secondary btn-sm" id="quotes-pdf-btn">⬇ PDF</button>
+      </div>
+    </div>
+    ${state.quotes.length ? `<div class="searchbar"><span class="ic">🔍</span><input id="quote-search" autocomplete="off" placeholder="Search quotes..." value="${esc(quotesSearch)}"></div>` : ''}
+    <div class="grid grid-3" id="quote-grid">${filtered.length ? filtered.map(quoteCard).join('') : emptyState('💬', 'No quotes saved yet', 'Add a quote with the + button below')}</div>
+  `;
+}
+function quoteCard(q) {
+  return `
+    <div class="note-card" data-id="${q.id}">
+      <div class="note-body" style="font-style:italic; -webkit-line-clamp:5;">“${esc(q.text)}”</div>
+      ${q.author ? `<div class="note-date" style="font-weight:700; color:var(--ink);">— ${esc(q.author)}</div>` : ''}
+    </div>`;
+}
+function afterRenderQuotes() {
+  const searchInput = document.getElementById('quote-search');
+  if (searchInput) searchInput.addEventListener('input', e => {
+    quotesSearch = e.target.value;
+    render();
+    const el = document.getElementById('quote-search');
+    if (el) { el.focus(); el.setSelectionRange(quotesSearch.length, quotesSearch.length); }
+  });
+  document.querySelectorAll('#quote-grid .note-card').forEach(card => {
+    card.addEventListener('click', () => openQuoteModal(state.quotes.find(x => x.id === card.dataset.id)));
+  });
+  document.getElementById('quotes-csv-btn').addEventListener('click', downloadQuotesReport);
+  document.getElementById('quotes-pdf-btn').addEventListener('click', downloadQuotesReportPDF);
+}
+function openQuoteModal(item) {
+  const editing = !!item;
+  openModal(`
+    <div class="modal-head"><h3>${editing ? 'Edit quote' : 'Add quote'}</h3><button class="btn-icon" id="modal-close">✕</button></div>
+    <div class="field"><label>Quote</label><textarea id="f-text" autocomplete="off" class="note-content-textarea" placeholder="Write the quote here">${esc(item?.text||'')}</textarea></div>
+    <div class="field"><label>Author (optional)</label><input id="f-author" autocomplete="off" value="${esc(item?.author||'')}" placeholder="e.g. Marcus Aurelius"></div>
+    <div class="modal-actions">
+      ${editing ? '<button class="btn btn-danger" id="modal-delete">Delete</button>' : ''}
+      <button class="btn btn-secondary" id="modal-cancel">Cancel</button>
+      <button class="btn btn-primary" id="modal-save">${editing?'Save changes':'Add quote'}</button>
+    </div>
+  `);
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('modal-cancel').addEventListener('click', closeModal);
+  if (editing) document.getElementById('modal-delete').addEventListener('click', () => {
+    confirmDialog('Delete quote?', 'This quote will be permanently removed.', () => {
+      state.quotes = state.quotes.filter(x => x.id !== item.id); persist('quotes'); closeModal(); render(); showToast('Quote deleted');
+    });
+  });
+  document.getElementById('modal-save').addEventListener('click', () => {
+    const text = document.getElementById('f-text').value.trim();
+    if (!text) { showToast('Please write a quote', 'error'); return; }
+    const data = { text, author: document.getElementById('f-author').value.trim() };
+    if (editing) { Object.assign(item, data); showToast('Quote updated'); }
+    else { state.quotes.push({ id: uid(), ...data, date: todayISO() }); showToast('Quote added'); }
+    persist('quotes'); closeModal(); render();
+  });
+}
+function downloadQuotesReport() {
+  const rows = [['Quote','Author','Date added']];
+  state.quotes.forEach(q => rows.push([q.text, q.author || '', q.date || '']));
+  downloadBlob(`quotes-${todayISO()}.csv`, toCSV(rows), 'text/csv');
+  showToast('Quotes exported');
+}
+function downloadQuotesReportPDF() {
+  const rows = state.quotes.map(q => [q.text, q.author || '—']);
+  downloadPDFReport(
+    'Saved Quotes — DailyLife',
+    ['Quote','Author'],
+    rows,
+    `quotes-${todayISO()}.pdf`,
+    [`Total quotes: ${state.quotes.length}`]
+  );
 }
 
 /* ============================== BILLS & SUBSCRIPTIONS ============================== */
@@ -2435,7 +2603,7 @@ function renderProfilePage() {
       <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; ${notif.enabled ? 'margin-bottom:12px;' : ''}">
         <div>
           <div style="font-weight:700; font-size:14px;">Due-date alerts</div>
-          <div class="stat-sub">Sends a notification to this device for reminders and bills that are due (checked while the app is open, and every few minutes in the background on supported devices)</div>
+          <div class="stat-sub">Sends a notification to this device for reminders (one day before, and the day they're due) and bills that are due (checked while the app is open, and every few minutes in the background on supported devices)</div>
         </div>
         <button class="btn ${notif.enabled?'btn-secondary':'btn-primary'} btn-sm" id="toggle-notif-btn">${notif.enabled?'Disable':'Enable'}</button>
       </div>
